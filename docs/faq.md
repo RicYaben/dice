@@ -71,12 +71,11 @@ Thank you for helping DICE to improve!
 @misc{dice,
     title: "DICE: Device Identification and Classification Engine",
     authors: "Yaben, Ricardo and Vasilomanolakis, Emmanouil",
-    url: "https://github.com/ryaben/dice.git",
+    url: "https://github.com/RicYaben/dice.git",
 }
 ```
 
 ### Q: Is there a list of open access research publications using DICE?
 
 __Yes.__
-We maintain a [separate repository](github.com/ryaben/dice-publications) with all the publications where we used DICE, including presentation slides, posters, etc.
-
+We maintain a [separate repository](https://github.com/RicYaben/dice-publications.git) with all the publications where we used DICE, including presentation slides, posters, etc.
