@@ -1,3 +1,4 @@
+// Signature parser
 package parser
 
 import (

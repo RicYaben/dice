@@ -34,72 +34,62 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-type Monitor interface {
-	// adds a subject
-	addSubject(Subject) error
-	// returns a subject
-	getSubject(id uint) Subject
-	// delete a subject
-	deleteSubject(id uint)
+type Emitter interface {
+	// adds a component to a list of topics
+	subscribe([]string, Component)
 	// dispatch an event to a subject
 	// E.g., adding a label or a record
-	dispatch(event hostEvent) error
+	emit(e Event) error
 }
 
-type hostMonitor struct {
-	repo     *eventRepo
-	subjects map[uint]Subject
+type eventEmitter struct {
+	// Map of event types and its subscribers
+	subs map[string][]Component
 }
 
-func (m *hostMonitor) addSubject(id uint, s Subject) {
-	m.subjects[id] = s
+func newEventEmitter() *eventEmitter {
+	return &eventEmitter{subs: make(map[string][]Component)}
 }
 
-func (m *hostMonitor) getSubject(id uint) Subject {
-	return m.subjects[id]
-}
-
-func (m *hostMonitor) deleteSubject(id uint) {
-	delete(m.subjects, id)
-}
-
-func (m *hostMonitor) dispatch(e hostEvent) error {
-	if err := m.repo.addEvent(e); err != nil {
-		return err
+func (m *eventEmitter) subscribe(events []string, comp Component) {
+	for _, e := range events {
+		m.subs[e] = append(m.subs[e], comp)
 	}
-
-	if sub, ok := m.subjects[e.HostID]; ok {
-		return sub.publish(e)
-	}
-	return fmt.Errorf("subject not registered %d", e.HostID)
 }
 
-type Subject interface {
+func (m *eventEmitter) emit(e Event) error {
+	for _, s := range m.subs[string(e.EventType)] {
+		return s.publish(e)
+	}
+	return nil
+}
+
+type Component interface {
 	ID() uint
 	// register an observer
-	register(obs Observer) error
+	register(obs Module) error
 	// remove an observer
-	deregister(obs Observer)
+	deregister(obs Module)
 	// publish an event
-	publish(e hostEvent) error
+	publish(e Event) error
 	// notify a single observer
-	notify(event hostEvent, obs ...Observer) error
+	notify(event Event, obs ...Module) error
 	// notify all observers
-	notifyAll(event hostEvent) error
+	notifyAll(event Event) error
 }
 
-type hostSubject struct {
+type component struct {
 	id        uint
 	repo      *recordRepo
-	observers []Observer
+	observers []Module
 	mu        sync.Mutex
 }
 
-func (s *hostSubject) ID() uint {
+func (s *component) ID() uint {
 	return s.id
 }
 
-func (s *hostSubject) registered(obs Observer) bool {
+func (s *component) registered(obs Module) bool {
 	for _, ob := range s.observers {
 		if ob == obs {
 			return true
@@ -108,7 +98,7 @@ func (s *hostSubject) registered(obs Observer) bool {
 	return false
 }
 
-func (s *hostSubject) doAfterRegister(obs Observer) error {
+func (s *component) doAfterRegister(obs Module) error {
 	records, err := s.repo.findUnmarkedRecords(s.ID(), obs.ID())
 	if err != nil {
 		return err
@@ -128,7 +118,7 @@ func (s *hostSubject) doAfterRegister(obs Observer) error {
 	return nil
 }
 
-func (s *hostSubject) register(obs Observer) error {
+func (s *component) register(obs Module) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -142,7 +132,7 @@ func (s *hostSubject) register(obs Observer) error {
 // TODO: remove the subject from
 // the monitor at some point when there are no more
 // events and no more observers
-func (s *hostSubject) deregister(obs Observer) {
+func (s *component) deregister(obs Module) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -157,7 +147,7 @@ func (s *hostSubject) deregister(obs Observer) {
 	}
 }
 
-func (s *hostSubject) getObserver(id uint) Observer {
+func (s *component) getObserver(id uint) Module {
 	for _, obs := range s.observers {
 		if obs.ID() == id {
 			return obs
@@ -166,7 +156,7 @@ func (s *hostSubject) getObserver(id uint) Observer {
 	return nil
 }
 
-func (s *hostSubject) publish(e hostEvent) error {
+func (s *component) publish(e Event) error {
 	switch e.EventType {
 	case "Label":
 		obs := s.getObserver(e.NodeID)
@@ -186,7 +176,7 @@ func (s *hostSubject) publish(e hostEvent) error {
 
 // When notifying, I should wrap the event to include the observer
 // the type of event, and the event itself (a label, a record, whatever)
-func (s *hostSubject) notify(e hostEvent, obs ...Observer) error {
+func (s *component) notify(e Event, obs ...Module) error {
 	for _, sub := range s.observers {
 		if slices.Contains(obs, sub) {
 			if err := sub.update(e); err != nil {
@@ -198,7 +188,7 @@ func (s *hostSubject) notify(e hostEvent, obs ...Observer) error {
 	return nil
 }
 
-func (s *hostSubject) notifyAll(e hostEvent) error {
+func (s *component) notifyAll(e Event) error {
 	for _, sub := range s.observers {
 		if err := sub.update(e); err != nil {
 			return err
@@ -207,111 +197,108 @@ func (s *hostSubject) notifyAll(e hostEvent) error {
 	return nil
 }
 
-type Observer interface {
-	// returns the ID of the observer
+type Module interface {
+	// returns the ID of the module
 	ID() uint
 	// handles an update in a subject
-	update(event hostEvent) error
+	update(event Event) error
 	// returns the children attached to this observer
-	getChildren() []Observer
+	getChildren() []Module
 	// process an event
-	process(e hostEvent) error
+	process(e Event) error
 	// stops the module
 	kill()
 }
 
-type nodeObserver struct {
+type module struct {
 	// Node attributes, we don't need to hold the whole node
 	id       uint
-	children []Observer
-	module   *dicePlugin
+	children []Module
+	plugin   *dicePlugin
 
 	handler  eventsHandler
-	repo     *hostRepo
-	eventBus func(hostEvent) error
+	repo     *cosmosRepo
+	eventBus func(Event) error
 }
 
-func (o *nodeObserver) update(e hostEvent) error {
+func (o *module) update(e Event) error {
 	return o.handler.handle(e)
 }
 
-func (o *nodeObserver) ID() uint {
+func (o *module) ID() uint {
 	return o.id
 }
 
 // return the registered observers
 // observers are loaded elsewhere, the observer does
 // not know how to make new ones.
-func (o *nodeObserver) getChildren() []Observer {
+func (o *module) getChildren() []Module {
 	return o.children
 }
 
-func (o *nodeObserver) kill() {
-	o.module.client.Kill()
+func (o *module) kill() {
+	o.plugin.client.Kill()
 }
 
-type scanObserver struct {
-	nodeObserver
+type scanModule struct {
+	module
 	scanner ScanPlugin
 }
 
-func (o *scanObserver) process(e hostEvent) error {
-	return o.repo.withTransaction(func(repo Repository) error {
-		re := repo.(*hostRepo)
-		host, err := re.getHost(e.HostID)
-		if err != nil {
-			return fmt.Errorf("failed to find host %d: %w", e.HostID, err)
+func (o *scanModule) process(e Event) error {
+	re := o.repo
+	host, err := re.getHost(e.HostID)
+	if err != nil {
+		return fmt.Errorf("failed to find host %d: %w", e.HostID, err)
+	}
+
+	records, err := o.scanner.Scan(host)
+	if err != nil {
+		return fmt.Errorf("failed to scan host %d: %w", e.HostID, err)
+	}
+
+	for _, r := range records {
+		if err := re.saveRecord(r); err != nil {
+			return fmt.Errorf("failed to create record: %w", err)
 		}
 
-		records, err := o.scanner.Scan(host)
-		if err != nil {
-			return fmt.Errorf("failed to scan host %d: %w", e.HostID, err)
-		}
-
-		for _, r := range records {
-			if err := re.saveRecord(r); err != nil {
-				return fmt.Errorf("failed to create record: %w", err)
-			}
-
-			event := makeEvent(e.HostID, o.ID(), r.ID, ON_RECORD)
-			if err := o.eventBus(event); err != nil {
-				return fmt.Errorf("failed to dispatch event: %w", err)
-			}
-		}
-		return nil
-	})
-}
-
-type ruleObserver struct {
-	nodeObserver
-	classifier RulePlugin
-}
-
-func (o *ruleObserver) process(e hostEvent) error {
-	return o.repo.withTransaction(func(repo Repository) error {
-		re := repo.(*hostRepo)
-		record, err := re.getRecord(e.ObjectID)
-		if err != nil {
-			return fmt.Errorf("could not find record %d", e.ObjectID)
-		}
-
-		if err := re.saveMark(Mark{RecordID: e.ObjectID, NodeID: o.ID()}); err != nil {
-			return fmt.Errorf("failed to mark record: %w", err)
-		}
-
-		label, err := o.classifier.Label(record)
-		if err != nil {
-			return fmt.Errorf("failed to label record")
-		}
-
-		if err := re.saveLabel(label); err != nil {
-			return fmt.Errorf("failed to create label: %w", err)
-		}
-
-		event := makeEvent(e.HostID, o.ID(), label.ID, ON_LABEL)
+		event := makeEvent(e.HostID, o.ID(), r.ID, ON_RECORD)
 		if err := o.eventBus(event); err != nil {
 			return fmt.Errorf("failed to dispatch event: %w", err)
 		}
-		return nil
-	})
+	}
+	return nil
+}
+
+type classifierModule struct {
+	module
+	classifier RulePlugin
+}
+
+func (o *classifierModule) process(e Event) error {
+	re := o.repo
+	fps, err := re.getFingerprints(e.ObjectID)
+	if err != nil {
+		return fmt.Errorf("could not find record %d", e.ObjectID)
+	}
+
+	if err := re.saveMark(Mark{FingerprintID: e.ObjectID, NodeID: o.ID()}); err != nil {
+		return fmt.Errorf("failed to mark record: %w", err)
+	}
+	fp := fps[0]
+
+	label, err := o.classifier.Label(fp)
+	if err != nil {
+		return fmt.Errorf("failed to label record")
+	}
+
+	if err := re.saveLabel(label); err != nil {
+		return fmt.Errorf("failed to create label: %w", err)
+	}
+
+	event := makeEvent(e.HostID, o.ID(), label.ID, ON_LABEL)
+	if err := o.eventBus(event); err != nil {
+		return fmt.Errorf("failed to dispatch event: %w", err)
+	}
+	return nil
 }

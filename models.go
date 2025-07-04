@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"iter"
 
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -97,6 +98,7 @@ type Host struct {
 	gorm.Model
 
 	Ip      string
+	Domain  string
 	Records []Record `gorm:"foreignKey:ID"`
 }
 
@@ -145,8 +147,8 @@ type Record struct {
 
 func (r *Record) Mark(tx *gorm.DB, nodeID uint) error {
 	mark := Mark{
-		RecordID: r.ID,
-		NodeID:   nodeID,
+		FingerprintID: r.ID,
+		NodeID:        nodeID,
 	}
 	if err := tx.Create(&mark).Error; err != nil {
 		return fmt.Errorf("failed to mark record: %w", err)
@@ -166,25 +168,67 @@ type Label struct {
 type Mark struct {
 	gorm.Model
 
-	RecordID uint
-	NodeID   uint
+	FingerprintID uint
+	NodeID        uint
 }
 
 type Node struct {
 	ID          uint
 	SignatureID uint
 	Type        string
-	Module      Module `gorm:"embedded;embeddedPrefix:node_"`
+	Module      ModuleModel `gorm:"embedded;embeddedPrefix:node_"`
 
 	// To find leaf nodes find by signatureID without any childs with the same
 	// signatureID
 	Childs []*Node `gorm:"many2many:node_childs;constraint:OnDelete:CASCADE"`
 }
 
-type Module struct {
+type ModuleModel struct {
 	gorm.Model
 
 	Name   string
 	Type   string
 	Source string
+}
+
+type SourceType string
+
+const (
+	SourceFile  SourceType = "file"
+	SourceStdin SourceType = "stdin"
+	SourceArgs  SourceType = "args"
+)
+
+type SourceModel struct {
+	gorm.Model
+
+	// Name of the source
+	Name string
+	Type SourceType `gorm:"index"`
+	// Data format: json,csv,...
+	Format   string
+	Location string         // for files or stdin descriptions
+	Args     datatypes.JSON // for args type only
+}
+
+type Fingerprint struct {
+	gorm.Model
+
+	HostID   uint
+	RecordID uint
+	NodeID   uint
+	Data     map[string]any
+}
+
+// PROJECT
+// ---
+
+// A project is a directory that holds scans with an invididual setup
+type Project struct {
+	gorm.Model
+
+	// Where the project lives
+	Home string
+	// Name of the project
+	Name string
 }

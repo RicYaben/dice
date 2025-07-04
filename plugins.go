@@ -9,32 +9,19 @@ import (
 )
 
 type ScanPlugin interface {
-	Scan(h *Host) ([]Record, error)
+	Scan(h *Host) error
 }
 
 type scanRPC struct {
 	client *rpc.Client
 }
 
-func (g *scanRPC) Scan(h *Host) ([]Record, error) {
-	var records []Record
-	if err := g.client.Call("Plugin.Scan", h, &records); err != nil {
-		return nil, err
-	}
-	return records, nil
+func (g *scanRPC) Scan(h *Host) error {
+	return g.client.Call("Plugin.Scan", h, nil)
 }
 
 type ScanRPCServer struct {
 	Impl ScanPlugin
-}
-
-func (s *ScanRPCServer) Scan(host *Host, records *[]Record) error {
-	r, err := s.Impl.Scan(host)
-	if err != nil {
-		return err
-	}
-	*records = r
-	return nil
 }
 
 type scanPlugin struct {
@@ -49,50 +36,71 @@ func (p *scanPlugin) Client(b *plugin.MuxBroker, c *rpc.Client) (interface{}, er
 	return &scanRPC{client: c}, nil
 }
 
-type RulePlugin interface {
-	Label(r *Record) (Label, error)
+type ClassifierPlugin interface {
+	Label(r *Host) error
 }
 
-type ruleRPC struct {
+type classifierRPC struct {
 	client *rpc.Client
 }
 
-func (g *ruleRPC) Label(r *Record) (Label, error) {
-	var label Label
-	if err := g.client.Call("Plugin.Label", r, &label); err != nil {
-		return label, err
-	}
-	return label, nil
+func (g *classifierRPC) Label(r *Host) error {
+	// maybe return a posible "result", i.e., error + value?
+	return g.client.Call("Plugin.Label", r, nil)
 }
 
-type ruleRPCServer struct {
-	Impl RulePlugin
+type classifierRPCServer struct {
+	Impl ClassifierPlugin
 }
 
-func (s *ruleRPCServer) Scan(r *Record, l *Label) error {
-	lab, err := s.Impl.Label(r)
-	if err != nil {
-		return err
-	}
-	*l = lab
-	return nil
+type classifierPlugin struct {
+	Impl ClassifierPlugin
 }
 
-type rulePlugin struct {
-	Impl RulePlugin
+func (p *classifierPlugin) Server(*plugin.MuxBroker) (interface{}, error) {
+	return &classifierRPCServer{Impl: p.Impl}, nil
 }
 
-func (p *rulePlugin) Server(*plugin.MuxBroker) (interface{}, error) {
-	return &ruleRPCServer{Impl: p.Impl}, nil
+func (p *classifierPlugin) Client(b *plugin.MuxBroker, c *rpc.Client) (interface{}, error) {
+	return &classifierRPC{client: c}, nil
 }
 
-func (p *rulePlugin) Client(b *plugin.MuxBroker, c *rpc.Client) (interface{}, error) {
-	return &ruleRPC{client: c}, nil
+type IdentifierPlugin interface {
+	Fingerprint(r *Source) error
+}
+
+type identifierRPC struct {
+	client *rpc.Client
+}
+
+type identifierRPCServer struct {
+	Impl IdentifierPlugin
+}
+
+func (g *classifierRPC) Fingerprint(s *Source) error {
+	return g.client.Call("Plugin.Fingerprint", s, nil)
+}
+
+func (s *identifierRPCServer) Scan(so *Source) error {
+	return s.Impl.Fingerprint(so)
+}
+
+type identifierPlugin struct {
+	Impl IdentifierPlugin
+}
+
+func (p *identifierPlugin) Server(*plugin.MuxBroker) (interface{}, error) {
+	return &identifierRPCServer{Impl: p.Impl}, nil
+}
+
+func (p *identifierPlugin) Client(b *plugin.MuxBroker, c *rpc.Client) (interface{}, error) {
+	return &identifierRPC{client: c}, nil
 }
 
 var pluginMap = map[string]plugin.Plugin{
-	"scan": &scanPlugin{},
-	"rule": &rulePlugin{},
+	"scan":       &scanPlugin{},
+	"identifier": &identifierPlugin{},
+	"classifier": &classifierPlugin{},
 }
 
 type dicePlugin struct {
@@ -103,19 +111,19 @@ type dicePlugin struct {
 type pluginFactory struct {
 	modulesPath string
 	plugins     map[string]plugin.Plugin
-	registered  map[Module]*dicePlugin
+	registered  map[ModuleModel]*dicePlugin
 }
 
 func newPluginFactory(path string) *pluginFactory {
 	return &pluginFactory{
 		modulesPath: path,
 		plugins:     pluginMap,
-		registered:  make(map[Module]*dicePlugin),
+		registered:  make(map[ModuleModel]*dicePlugin),
 	}
 }
 
 // Makes a new client for some specific plugin
-func (f *pluginFactory) loadPlugin(m Module) (*dicePlugin, error) {
+func (f *pluginFactory) loadPlugin(m ModuleModel) (*dicePlugin, error) {
 	client := plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig: plugin.HandshakeConfig{
 			ProtocolVersion: 1,
@@ -143,6 +151,6 @@ func (f *pluginFactory) loadPlugin(m Module) (*dicePlugin, error) {
 	return p, nil
 }
 
-func (f *pluginFactory) getModule(m Module) *dicePlugin {
+func (f *pluginFactory) getModule(m ModuleModel) *dicePlugin {
 	return f.registered[m]
 }

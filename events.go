@@ -1,11 +1,15 @@
 package dice
 
+import "iter"
+
 // Accepted event handlers. Monitors dispatch events
 // to their subjects, and these to their subscribers.
 // The monitor is in charge of registering the event into the repo
 // and dispatching it afterwards
-type EventType string
+type EventType uint8
+type EventIter iter.Seq2[Event, error]
 
+// TODO: clean
 const (
 	// Fires on record created
 	ON_RECORD EventType = "RecordCreated"
@@ -13,42 +17,36 @@ const (
 	ON_LABEL EventType = "LabelCreated"
 )
 
-type hostEvent struct {
-	// Host attributes and the object event triggering the
-	// event, e.g., a new record or label
-	HostID   uint
-	ObjectID uint
+const (
+	SOURCE_EVENT EventType = iota
+	LABEL_EVENT
+	FINGERPRINT_EVENT
+	HOST_EVENT
+	SCAN_EVENT
+)
 
-	// Event producer. It is always a node
+type Event struct {
+	ObjectID  uint
 	NodeID    uint
 	EventType EventType
 }
 
-func makeEvent(hostID, nodeID, objectID uint, eType EventType) hostEvent {
-	return hostEvent{
-		HostID:    hostID,
-		NodeID:    nodeID,
-		ObjectID:  objectID,
-		EventType: eType,
-	}
-}
-
 type eventsHandler interface {
 	addHandler(h eventHandler)
-	handle(e hostEvent) error
+	handle(e Event) error
 }
 
 type eventHandler struct {
 	Type   EventType
-	Handle func(hostEvent) error
+	Handle func(Event) error
 }
 
 type eventsHandlerIterator struct {
-	observer Observer
+	observer Module
 	handlers []eventHandler
 }
 
-func (h *eventsHandlerIterator) handle(e hostEvent) error {
+func (h *eventsHandlerIterator) handle(e Event) error {
 	for _, handler := range h.handlers {
 		if err := handler.Handle(e); err != nil {
 			return err
@@ -58,11 +56,11 @@ func (h *eventsHandlerIterator) handle(e hostEvent) error {
 }
 
 type eventsHandlerMap struct {
-	observer Observer
+	observer Module
 	handlers map[EventType]eventHandler
 }
 
-func (h *eventsHandlerMap) handle(e hostEvent) error {
+func (h *eventsHandlerMap) handle(e Event) error {
 	if h, ok := h.handlers[e.EventType]; ok {
 		return h.Handle(e)
 	}
@@ -93,7 +91,7 @@ const (
 	S_NONE Strategy = "none"
 )
 
-func propagate(subject Subject, observer Observer, unsub bool) {
+func propagate(subject Component, observer Module, unsub bool) {
 	if unsub {
 		subject.deregister(observer)
 	}
@@ -103,11 +101,11 @@ func propagate(subject Subject, observer Observer, unsub bool) {
 	}
 }
 
-func defaultRole(m Monitor, o Observer) []eventHandler {
+func defaultRole(m Emitter, o Module) []eventHandler {
 	return []eventHandler{
 		{
 			Type: ON_RECORD,
-			Handle: func(e hostEvent) error {
+			Handle: func(e Event) error {
 				if sub := m.getSubject(e.HostID); sub != nil {
 					if err := o.process(e); err != nil {
 						return err
@@ -120,11 +118,11 @@ func defaultRole(m Monitor, o Observer) []eventHandler {
 	}
 }
 
-func holdRole(m Monitor, o Observer) []eventHandler {
+func holdRole(m Emitter, o Module) []eventHandler {
 	return []eventHandler{
 		{
 			Type: ON_RECORD,
-			Handle: func(e hostEvent) error {
+			Handle: func(e Event) error {
 				if sub := m.getSubject(e.HostID); sub != nil {
 					if err := o.process(e); err != nil {
 						return err
@@ -137,11 +135,11 @@ func holdRole(m Monitor, o Observer) []eventHandler {
 	}
 }
 
-func gateRole(m Monitor, o Observer) []eventHandler {
+func gateRole(m Emitter, o Module) []eventHandler {
 	return []eventHandler{
 		{
 			Type: ON_LABEL,
-			Handle: func(e hostEvent) error {
+			Handle: func(e Event) error {
 				if sub := m.getSubject(e.HostID); sub != nil {
 					propagate(sub, o, true)
 				}
@@ -150,18 +148,18 @@ func gateRole(m Monitor, o Observer) []eventHandler {
 		},
 		{
 			Type: ON_RECORD,
-			Handle: func(e hostEvent) error {
+			Handle: func(e Event) error {
 				return o.process(e)
 			},
 		},
 	}
 }
 
-func noneRole(m Monitor, o Observer) []eventHandler {
+func noneRole(m Emitter, o Module) []eventHandler {
 	return []eventHandler{
 		{
 			Type: ON_RECORD,
-			Handle: func(e hostEvent) error {
+			Handle: func(e Event) error {
 				if sub := m.getSubject(e.HostID); sub != nil {
 					propagate(sub, o, true)
 				}
@@ -172,23 +170,23 @@ func noneRole(m Monitor, o Observer) []eventHandler {
 }
 
 type EventsHandlerBuilder struct {
-	monitor  Monitor
-	observer Observer
+	emitter  Emitter
+	module   Module
 	strategy Strategy
 	handler  eventsHandler
 }
 
 func (b *EventsHandlerBuilder) reset() {
-	b.observer = nil
+	b.module = nil
 }
 
-func (b *EventsHandlerBuilder) setMonitor(m Monitor) *EventsHandlerBuilder {
-	b.monitor = m
+func (b *EventsHandlerBuilder) setMonitor(m Emitter) *EventsHandlerBuilder {
+	b.emitter = m
 	return b
 }
 
-func (b *EventsHandlerBuilder) setObserver(o Observer) *EventsHandlerBuilder {
-	b.observer = o
+func (b *EventsHandlerBuilder) setObserver(o Module) *EventsHandlerBuilder {
+	b.module = o
 	return b
 }
 
@@ -203,13 +201,13 @@ func (b *EventsHandlerBuilder) Build() eventsHandler {
 	var handlers []eventHandler
 	switch b.strategy {
 	case S_DEFAULT:
-		handlers = defaultRole(b.monitor, b.observer)
+		handlers = defaultRole(b.emitter, b.module)
 	case S_HOLD:
-		handlers = holdRole(b.monitor, b.observer)
+		handlers = holdRole(b.emitter, b.module)
 	case S_GATE:
-		handlers = gateRole(b.monitor, b.observer)
+		handlers = gateRole(b.emitter, b.module)
 	case S_NONE:
-		handlers = noneRole(b.monitor, b.observer)
+		handlers = noneRole(b.emitter, b.module)
 	}
 
 	h := b.handler
