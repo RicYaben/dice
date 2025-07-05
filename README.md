@@ -4,18 +4,18 @@
 
 </p>
 
-<p align="center">
+<div align="center">
 
 [The Engine](docs/the_engine.md) |
 [FAQ](docs/faq.md) |
 [Contact](docs/contact.md)
 
-[Developer Guide](docs/dev.md) |
 [Commands](docs/commands.md) |
 [Features](docs/features.md) |
-[Route plan](docs/plans.md)
+[Roadmap](docs/roadmap.md) |
+[Developer Guide](docs/dev.md)
 
-</p>
+</div>
 
 DICE is an engine to help orchestrating network measurements.
 At the core, DICE falls into the category of vulnerability identification.
@@ -25,6 +25,8 @@ It's main purpose is to provide flexibility for as many measurements as you can 
 
 > [!TIP]
 > Got an idea? need a feature? found a bug? [open an issue!](github.com/RicYaben/dice/issues)
+
+__Table of Conent__
 
 1. [Installation](#installation)
 2. [Quickstart](#quickstart)
