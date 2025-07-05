@@ -17,7 +17,7 @@ __Ricardo Yaben__, original author
 * Affiliation: Technical University of Denmark (DTU)
 * Links: [ORCID](https://orcid.org/0009-0007-3608-8883), [DTU](https://orbit.dtu.dk/en/persons/ricardo-maria-yaben-lopezosa)
 
-__Dr. Emmanouil Vasilomanolakis__, original author
+__Emmanouil Vasilomanolakis__, original author
 
 * Contact: <emmva@dtu.dk>
 * Affiliation: Technical University of Denmark (DTU)
