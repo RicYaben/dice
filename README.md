@@ -23,9 +23,6 @@ It was first thought as a tool for Internet surveys and monitoring networks, a f
 However, DICE can be used at many different levels.
 It's main purpose is to provide flexibility for as many measurements as you can think of.
 
-> [!TIP]
-> Got an idea? need a feature? found a bug? [open an issue!](github.com/RicYaben/dice/issues)
-
 __Table of Conent__
 
 1. [Installation](#installation)
@@ -181,3 +178,23 @@ DICE can layer measurements as a sequence.
 # Scan for healthcare devices and then for iot devices
 dice scan -S healthcare --layer=1 -S iot --layer=2
 ```
+
+# SUPPORT
+
+Right now, the best way to support DICE is by using it or contributing to its development.
+
+## Citing DICE
+
+If you are a researcher using DICE, please use the following reference:
+
+```bib
+@misc{yaben2025dice,
+    title={{DICE}: Device Identification and Classification Engine},
+    author={Yaben, Ricardo and Vasilomanolakis, Emmanouil},
+    url="https://github.com/RicYaben/dice",
+    year={2025}
+}
+```
+
+You are welcome to cite any other of our recent publications using DICE.
+If you have any question, [get in contact](docs/contact.md).
