@@ -124,9 +124,9 @@ func BindStandardPaths(stdpaths *StandardPaths) *StandardPaths {
 }
 
 type Configuration struct {
+	Paths   StandardPaths
 	profile string
-	paths   StandardPaths
-	log     LogsFlags
+	//log     LogsFlags
 }
 
 // Configuration without profile.
@@ -134,16 +134,16 @@ type Configuration struct {
 func baseConfig() Configuration {
 	return Configuration{
 		profile: "-",
-		paths:   basicStandardPaths(),
+		Paths:   basicStandardPaths(),
 	}
 }
 
-func LoadConfiguration(stdpaths StandardPaths, out LogsFlags, conf *Configuration) error {
+func LoadConfiguration(stdpaths StandardPaths, conf *Configuration) error {
 	// initialize paths
 	if err := stdpaths.init(); err != nil {
 		return errors.Wrap(err, "failed to initialize standard paths")
 	}
 
-	conf.paths = stdpaths
+	conf.Paths = stdpaths
 	return nil
 }

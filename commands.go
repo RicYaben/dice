@@ -1,9 +1,12 @@
 package dice
 
 import (
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
+
+type InitFlags struct {
+	NoCache bool
+}
 
 func Commands(conf Configuration) []*cobra.Command {
 	return []*cobra.Command{
@@ -13,9 +16,14 @@ func Commands(conf Configuration) []*cobra.Command {
 		addCommand(conf),   // add projects or signatures to their db
 		listCommand(conf),  // list signatures or projects
 		clearCommand(conf), // clear databases
-		// DICE group to scan and classify
-		scanCommand(conf),     // scan with signatures
-		classifyCommand(conf), // classify dataset with signatures (no scan)
+
+		// TODO: this is better?
+		// engineCommands(conf) // scan, classify
+		// signatureCommand(conf) // add, remove, list
+		// moduleCommand(conf)
+		// projectCommand(conf) // switch
+		// studyCommand(conf) // switch
+		// cosmosCommand(conf) // query
 	}
 }
 
@@ -147,131 +155,6 @@ func listCommand(conf Configuration) *cobra.Command {
 
 	cmd.MarkFlagsMutuallyExclusive("signature", "project")
 	cmd.MarkFlagsOneRequired("signature", "project")
-
-	return cmd
-}
-
-type EngineActions struct {
-	Scan     bool
-	Identify bool
-	Classify bool
-}
-
-type EngineSetupFlags struct {
-	Signatures []string
-	Project    string
-	Actions    EngineActions
-}
-
-type EngineRunFlags struct {
-	Scan    string
-	Sources []string
-}
-
-func lazyEngineSetup(engine *engine, sFlags EngineSetupFlags, conf Configuration) func(cmd *cobra.Command, args []string) error {
-	return func(cmd *cobra.Command, args []string) error {
-		// Create the graph of scanners, identifiers and classifiers from
-		// the loaded signatures
-		engine.conf = conf
-		if err := LoadEngine(engine, conf, sFlags); err != nil {
-			return errors.Wrap(err, "failed to build engine")
-		}
-		return nil
-	}
-}
-
-func scanCommand(conf Configuration) *cobra.Command {
-	var (
-		eFlags = EngineSetupFlags{
-			Actions: EngineActions{
-				true, true, true,
-			},
-		}
-		rFlags EngineRunFlags
-	)
-
-	engine := new(engine)
-	cmd := &cobra.Command{
-		Use:     "scan [target]... [-S signatures]... [-P project] ([-s sources]... [--scan scan])",
-		Short:   "Orchestrate a new scan",
-		GroupID: "run",
-		PreRunE: lazyEngineSetup(engine, eFlags, conf),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Scanning from sources means that we use previously collected results
-			// as the seed for this scan. For example, if we use results from zmap,
-			// we can scan now with a bunch of signatures to produce a similar result.
-			// E.g 1: follow-up scans on known targets.
-			// E.g 2: resume scans
-
-			// load these sources. The engine should have access to all the needed
-			// repos based on the config.
-			srcs, err := engine.findSources(rFlags.Scan, rFlags.Sources, []string{"*.json", "*.csv", "*.txt"})
-			if err != nil {
-				return errors.Wrap(err, "failed to find sources")
-			}
-
-			// a list of targets.
-			if len(args) > 0 {
-				src, err := makeTargetArgsSource(args)
-				if err != nil {
-					return err
-				}
-				srcs = append(srcs, src)
-			}
-
-			// For now, no stdin
-			// srcs.append(makeStdinSource())
-			return engine.Run(srcs) // resume
-		},
-	}
-
-	flags := cmd.Flags()
-	// setup flags
-	flags.StringArrayVarP(&eFlags.Signatures, "signature", "S", []string{"*"}, "Signatures to load. By default loads all signatures")
-	flags.StringVarP(&eFlags.Project, "project", "P", "-", "Project to use. Defaults to current project")
-	// run flags
-	flags.StringArrayVarP(&rFlags.Sources, "sources", "s", []string{}, "Sources to use as input. If this flag is set, other inputs are ignored")
-	flags.StringVar(&rFlags.Scan, "scan", "-", "Scan to use. Required if sources flag included")
-	//flags.BoolVar(&rFlags.Resume, "resumev", false, "Resume a previous scan. This flag is ignore during new scans")
-	cmd.MarkFlagsRequiredTogether("sources", "scan")
-
-	return cmd
-}
-
-func classifyCommand(conf Configuration) *cobra.Command {
-	var (
-		eFlags = EngineSetupFlags{
-			Actions: EngineActions{
-				false, true, true,
-			},
-		}
-		rFlags EngineRunFlags
-	)
-
-	engine := new(engine)
-	cmd := &cobra.Command{
-		Use:     "classify scan [-P project] [-S signatures]... [--sources source]...",
-		Aliases: []string{"class", "cls"},
-		Short:   "Classify a scan",
-		GroupID: "run",
-		Args:    cobra.ExactArgs(1),
-		PreRunE: lazyEngineSetup(engine, eFlags, conf),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Classify a scan from a list of sources. Outputs a cosmos
-			srcs, err := engine.findSources(args[0], rFlags.Sources, []string{"*.json", "*.csv", "*.txt"})
-			if err != nil {
-				return errors.Wrap(err, "failed to find sources")
-			}
-			return engine.Run(srcs)
-		},
-	}
-
-	flags := cmd.Flags()
-	// setup flags
-	flags.StringArrayVarP(&eFlags.Signatures, "signature", "S", []string{"*"}, "Signatures to load. By default loads all signatures")
-	flags.StringVarP(&eFlags.Project, "project", "P", "-", "Project to use. Defaults to current project")
-	// run flags
-	flags.StringArrayVarP(&rFlags.Sources, "sources", "s", []string{}, "Sources to use as input. If this flag is set, other inputs are ignored")
 
 	return cmd
 }

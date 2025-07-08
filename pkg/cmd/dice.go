@@ -9,10 +9,8 @@ import (
 type Flags struct {
 	Paths dice.StandardPaths
 	//Config dice.ConfigFlags
-	Output dice.LogsFlags
 }
 
-// TODO: interactive cli?
 func Run() error {
 	var conf dice.Configuration
 	var f Flags
@@ -27,7 +25,7 @@ func Run() error {
 			// 1. bind the paths. Overrides defaults.
 			dice.BindStandardPaths(&f.Paths)
 			// 2. load and validate the configuration
-			return dice.LoadConfiguration(f.Paths, f.Output, &conf)
+			return dice.LoadConfiguration(f.Paths, &conf)
 		},
 	}
 
@@ -41,11 +39,6 @@ func Run() error {
 	pathFlags.StringVar(&stdpaths.STATE_HOME, "stdpath.state", dice.UnsetFlag, "State directory")
 	pathFlags.StringVar(&stdpaths.DATA_HOME, "stdpath.data", dice.UnsetFlag, "Data directory")
 	fl.AddFlagSet(pathFlags)
-
-	out := &f.Output
-	outFlags := pflag.NewFlagSet("Output", pflag.ExitOnError)
-	outFlags.BoolVar(&out.Debug, "debug", false, "Debug mode. Very verbose (not recommended)")
-	outFlags.BoolVar(&out.Quiet, "quiet", false, "Run DICE in quiet mode (recommended). Check the logs to see output messages.")
 
 	// Config flags -- not used atm
 	// cfg := &f.Config

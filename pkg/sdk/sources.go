@@ -1,32 +1,9 @@
-// Project sources. Sources of data
-//
-// Usage:
-// newSource("targets", input, handler)
-//
-// source.Records() // get an Iterator over the input records
-package dice
+package sdk
 
 import (
-	"encoding/json"
 	"io"
 	"iter"
-
-	"github.com/pkg/errors"
 )
-
-// Makes a new source from arguments
-func makeTargetArgsSource(args []string) (*SourceModel, error) {
-	b, err := json.Marshal(args)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal arguments")
-	}
-
-	return &SourceModel{
-		Name: "targets",
-		Type: SourceArgs,
-		Args: b,
-	}, nil
-}
 
 type RecordsIterator iter.Seq2[[]byte, error]
 type RecordsReader func(io.Reader) RecordsIterator

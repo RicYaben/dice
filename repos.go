@@ -71,7 +71,7 @@ type sourceRepo struct {
 	currScan    string
 }
 
-func (r *sourceRepo) addSource(s *SourceModel) error {
+func (r *sourceRepo) addSource(s *Source) error {
 	return r.WithTransaction(func(conn *gorm.DB) error {
 		sourceQ := conn.Create(s)
 		if err := sourceQ.Error; err != nil {
@@ -81,12 +81,27 @@ func (r *sourceRepo) addSource(s *SourceModel) error {
 	})
 }
 
-func (r *sourceRepo) getSources(u ...uint) ([]*SourceModel, error) {
+func (r *sourceRepo) getSources(u ...uint) ([]*Source, error) {
 	panic("not implemented yet")
 }
 
+// func (e *engine) findSources(scan string, names, globs []string) ([]*SourceModel, error) {
+// 	var srcs []*SourceModel
+
+// 	// Location of the scan
+// 	for _, name := range names {
+// 		// Scan source location
+// 		sr, err := e.conn.sources.find(scan, name, globs)
+// 		if err != nil {
+// 			return nil, errors.Wrap(err, "failed to locate source")
+// 		}
+// 		srcs = append(srcs, sr...)
+// 	}
+// 	return srcs, nil
+// }
+
 // Locates source files inside a scan by the name of the source
-func (r *sourceRepo) findSourceFiles(spath, sname string, globs []string) ([]*SourceModel, error) {
+func (r *sourceRepo) findSourceFiles(spath, sname string, globs []string) ([]*Source, error) {
 	fpath := filepath.Join(spath, sname)
 	info, err := os.Stat(spath)
 	if os.IsNotExist(err) {
@@ -97,23 +112,23 @@ func (r *sourceRepo) findSourceFiles(spath, sname string, globs []string) ([]*So
 		return nil, errors.Wrap(err, "source path not a directory")
 	}
 
-	var srcs []*SourceModel
+	var srcs []*Source
 	// globs are just fine. It takes some time to iterate through all the
 	// patterns, but it adds flexibility
-	withGlob := func(glob string) ([]*SourceModel, error) {
+	withGlob := func(glob string) ([]*Source, error) {
 		matches, err := filepath.Glob(filepath.Join(fpath, glob))
 		if err != nil {
 			return nil, errors.Wrap(err, "invalid glob pattern")
 		}
 
-		var gSrcs []*SourceModel
+		var gSrcs []*Source
 		for _, match := range matches {
 			_, err := os.Stat(match)
 			if err != nil || info.IsDir() {
 				continue // we cannot stat this, or is a dir
 			}
 
-			gSrcs = append(gSrcs, &SourceModel{
+			gSrcs = append(gSrcs, &Source{
 				Name:     sname,
 				Location: match,
 				Type:     SourceFile,
@@ -142,44 +157,7 @@ func (r *cosmosRepo) getHost(id uint) (*Host, error) {
 	panic("not implemented yet")
 }
 
-// returns a record by id
-func (r *cosmosRepo) getRecords(id ...uint) ([]*Record, error) {
-	panic("not implemented yet")
-}
-
-// stores a record
-func (r *cosmosRepo) saveRecord(record Record) error {
-	panic("not implemented yet")
-}
-
-// stores a label
-func (r *cosmosRepo) saveLabel(label Label) error {
-	panic("not implemented yet")
-}
-
-// stores a mark
-func (r *cosmosRepo) saveMark(mark Mark) error {
-	panic("not implemented yet")
-}
-
-// ----
-func (r *cosmosRepo) addHost(h *Host) error {
-	panic("not implemented yet")
-}
-
 func (r *cosmosRepo) getHosts(id ...uint) ([]*Host, error) {
-	panic("not implemented yet")
-}
-
-func (r *cosmosRepo) addFingerprint(f *Fingerprint) error {
-	panic("not implemented yet")
-}
-
-func (r *cosmosRepo) getFingerprints(id ...uint) ([]*Fingerprint, error) {
-	panic("not implemented yet")
-}
-
-func (r *cosmosRepo) addLabel(l *Label) error {
 	panic("not implemented yet")
 }
 
@@ -187,13 +165,19 @@ func (r *cosmosRepo) getLabels(id ...uint) ([]*Label, error) {
 	panic("not implemented yet")
 }
 
-// ----
-
-type recordRepo struct {
-	repository
+func (r *cosmosRepo) getFingerprints(id ...uint) ([]*Fingerprint, error) {
+	panic("not implemented yet")
 }
 
-func (r *recordRepo) findUnmarkedRecords(hostID, nodeID uint) ([]*Record, error) {
+func (r *cosmosRepo) addHost(h *Host) error {
+	panic("not implemented yet")
+}
+
+func (r *cosmosRepo) addFingerprint(f *Fingerprint) error {
+	panic("not implemented yet")
+}
+
+func (r *cosmosRepo) addLabel(l *Label) error {
 	panic("not implemented yet")
 }
 
@@ -319,15 +303,17 @@ func (r *projectRepo) deleteProjects() error {
 }
 
 type repositoryBuilder struct {
-	home     string
-	location string
-	config   *gorm.Config
-	models   []any
+	home      string
+	workspace string
+	location  string
+	config    *gorm.Config
+	models    []any
 }
 
-func newRepositoryBuilder(home string) *repositoryBuilder {
+func newRepositoryBuilder(home, workspace string) *repositoryBuilder {
 	return &repositoryBuilder{
-		home: home,
+		home:      home,
+		workspace: workspace,
 		config: &gorm.Config{
 			SkipDefaultTransaction: true,
 			PrepareStmt:            true,
@@ -379,9 +365,9 @@ type repositoryRegistry struct {
 	sources    *sourceRepo
 }
 
-func newRepositoryFactory(home string) *repositoryRegistry {
+func newRepositoryFactory(home, workspace string) *repositoryRegistry {
 	return &repositoryRegistry{
-		builder: newRepositoryBuilder(home),
+		builder: newRepositoryBuilder(home, workspace),
 	}
 }
 
@@ -390,7 +376,7 @@ func (r *repositoryRegistry) Signatures() *signatureRepo {
 		return r.signatures
 	}
 
-	models := []any{&Signature{}, &Scanner{}, &Identifier{}, &Classifier{}}
+	models := []any{&Signature{}, &Module{}, &Node{}}
 	repo := r.builder.setModels(models).setName("signatures.db").build()
 	r.signatures = &signatureRepo{repo}
 	return r.signatures
@@ -410,7 +396,7 @@ func (r *repositoryRegistry) Events() *eventRepo {
 		return r.events
 	}
 	// Events db is always in memory
-	b := newRepositoryBuilder("-")
+	b := newRepositoryBuilder("-", "-")
 	repo := b.setModels([]any{&Event{}}).build()
 	r.events = &eventRepo{repo}
 	return r.events
@@ -422,9 +408,10 @@ func (r *repositoryRegistry) Cosmos() *cosmosRepo {
 	}
 
 	// cosmos goes into the current directory
-	b := newRepositoryBuilder(".")
+	// TODO: not sure about this. Cosmos should go to the workspace
+	b := newRepositoryBuilder(".", r.builder.workspace)
 	repo := b.
-		setModels([]any{&Host{}, &Fingerprint{}, &Label{}}).
+		setModels([]any{&Host{}, &Fingerprint{}, &Label{}, &Hook{}}).
 		setName("cosmos.db").
 		build()
 	r.cosmos = &cosmosRepo{repo}
@@ -433,53 +420,8 @@ func (r *repositoryRegistry) Cosmos() *cosmosRepo {
 
 func (r *repositoryRegistry) Sources() *sourceRepo {
 	// Sources goes into memory
-	b := newRepositoryBuilder("-")
+	b := newRepositoryBuilder("-", "-")
 	repo := b.setModels([]any{&Source{}}).build()
 	r.sources = &sourceRepo{Repository: repo}
 	return r.sources
-}
-
-// Adapters
-type adapterFactory struct {
-	repos repositoryRegistry
-}
-
-func newAdapterFactory(home string) *adapterFactory {
-	return &adapterFactory{*newRepositoryFactory(home)}
-}
-
-func (a *adapterFactory) cosmosAdapter() *cosmosAdapter {
-	return &cosmosAdapter{
-		cosmos: a.repos.Cosmos(),
-	}
-}
-
-func (a *adapterFactory) signaturesAdapter() *signaturesAdapter {
-	return &signaturesAdapter{
-		sigs: a.repos.Signatures(),
-	}
-}
-
-// TODO
-// models: host, label, fingerprint, source
-// get ...models
-// add ..models
-type cosmosAdapter struct {
-	cosmos *cosmosRepo
-}
-
-func (a *cosmosAdapter) Search(q string) (string, error) {
-	panic("not implemented yet")
-}
-
-func (a *cosmosAdapter) getHost(id uint) (*Host, error) {
-	return a.cosmos.getHost(id)
-}
-
-type signaturesAdapter struct {
-	sigs *signatureRepo
-}
-
-func (a *signaturesAdapter) loadSignatures(sigs []string) ([]*Signature, error) {
-	panic("not implemented yet")
 }

@@ -1,139 +1,130 @@
 package dice
 
-import "github.com/pkg/errors"
+import (
+	"github.com/pkg/errors"
+)
+
+// A simple registry that holds staged signatures
+type registry struct {
+	signatures map[uint]Signature
+}
+
+func (r *registry) addSignature(s ...Signature) {
+	for _, sig := range s {
+		if _, ok := r.signatures[sig.ID]; !ok {
+			r.signatures[sig.ID] = sig
+		}
+	}
+}
+
+func (r *registry) getOrCreateSignature(id uint) Signature {
+	if sig, ok := r.signatures[id]; ok {
+		return sig
+	}
+	sig := Signature{Name: "-"}
+	sig.ID = id
+	r.signatures[id] = sig
+	return sig
+}
 
 type composer struct {
-	adapter *composerAdapter
+	adapter  ComposerAdapter
+	registry registry
 }
 
-func newComposer(adapter *composerAdapter) *composer {
-	return &composer{adapter}
+func NewComposer(adapter ComposerAdapter) *composer {
+	return &composer{adapter, registry{}}
 }
 
-// Compose components from signatures and actions. Only load components from actions.
-// FAQ: can I use DICE with my parameters to scan for something in particular without classifying?
-// You can create a basic signature that says exactly that, on new targets added, scan for x,y,z
-/*
-// dummy.dice
-cls dummy
-// dummy module `dummy.go`
-*/
-func (c *composer) Compose(sigs []string, actions EngineActions) ([]Component, error) {
-	// Load all signatures in the adapter. We dont need to know the graph or anything else here
-	if err := c.adapter.loadSignatures(sigs); err != nil {
-		return nil, errors.Wrap(err, "failed to make graph")
-	}
-
-	var comps []Component
-	if actions.Classify {
-		clsComp := c.newClassifier().addModule(c.adapter.Classifiers())
-		comps = append(comps, clsComp)
-	}
-
-	if actions.Identify {
-		// identifiers are loaded at run-time or are static
-		// the adapter should know the static ones
-		idComp := c.newIdentifier().addModule(c.adapter.Identifiers())
-		comps = append(comps, idComp)
-	}
-
-	if actions.Scan {
-		scnComp := c.newScanner().addModule(c.adapter.Scanners())
-		comps = append(comps, scnComp)
-	}
-
-	return comps, nil
-}
-
-func (c *composer) newClassifier() *component {
-	// TODO: add event handler
-	// A component adapter is an adapter that can create module adapters with handlers, etc.
-	// is a middle interface
-	handleSource := func(comp *component, host *Host) error {
-		// the adapter contains a registry of signatures and modules loaded
-		// so we can get access to those modules directly
-		mods, err := c.adapter.getClassifiers(host.Hooks...)
+// Preload signatures and modules. This is meant to find
+// signatures and register them into a common registry.
+func (c *composer) Stage(t string, names []string) error {
+	switch t {
+	case "signatures":
+		sigs, err := c.adapter.FindSignatures(names)
+		if err != nil {
+			return errors.Wrap(err, "failed to find signatures")
+		}
+		c.registry.addSignature(sigs...)
+		return nil
+	case "modules":
+		mods, err := c.adapter.FindModules(names)
 		if err != nil {
 			return errors.Wrap(err, "failed to find modules")
 		}
+		sig := c.registry.getOrCreateSignature(0)
 
+		// add modules to the signature
+		// this converts the modules into nodes
 		for _, mod := range mods {
-			if err := mod.update(host); err != nil {
-				return err
+			node := &Node{
+				SignatureID: sig.ID,
+				Type:        MODULE_NODE,
+				ObjectID:    mod.ID,
 			}
+			sig.Nodes = append(sig.Nodes, node)
 		}
 		return nil
 	}
+	return errors.Errorf("unknown type %s", t)
+}
 
-	handleHost := func(comp *component, host *Host) error {
-		for _, mod := range comp.modules {
-			if err := mod.update(host); err != nil {
-				return err
-			}
+// Compose components from signatures and actions. Only load named comps.
+func (c *composer) Compose(names []string) ([]*Component, error) {
+	// make a component adapter with notion of a bunch of signatures
+	factory := &componentFactory{c.adapter.withRegistry(c.registry)}
+	var comps []*Component
+	for _, n := range names {
+		if cmp := factory.makeComponent(n); cmp != nil {
+			comps = append(comps, cmp)
 		}
+	}
+	return comps, nil
+}
+
+type componentFactory struct {
+	sigs ComposerAdapter
+}
+
+func (f *componentFactory) makeComponent(n string) *Component {
+	switch n {
+	case "identifier":
+		return f.makeIdentifier()
+	case "classifier":
+		return f.makeClassifier()
+	case "scanner":
+		return f.makeScanner()
+	default:
 		return nil
 	}
+}
 
-	return &component{
-		Name:    "classifier",
-		Adapter: c.adapter.componentAdapter(),
-		EventHandler: func(comp *component, e Event) error {
-			host, err := comp.adapter.getHost(e.ObjectID)
-			if err != nil {
-				return errors.Wrapf(err, "failed to find host %d", e.ObjectID)
-			}
-
-			switch e.EventType {
-			case SOURCE_EVENT:
-				return handleSource(comp, host)
-			case HOST_EVENT:
-				return handleHost(comp, host)
-			}
-			return errors.Errorf("unable to handle event type %v", e.EventType)
-		},
-		Events: []EventType{FINGERPRINT_EVENT, HOST_EVENT},
+func (f *componentFactory) makeIdentifier() *Component {
+	sigs := f.sigs.SearchSingatures(Signature{Type: "identfier"})
+	return &Component{
+		Name:       "Identifier",
+		Handler:    componentEventHandler,
+		Events:     []EventType{SOURCE_EVENT},
+		Signatures: sigs,
 	}
 }
 
-func (c *composer) newIdentifier() *component {
-	return &component{
-		Name:    "identifier",
-		Adapter: c.adapter.componentAdapter(),
-		EventHandler: func(comp *component, e Event) error {
-			source, err := comp.adapter.getSource(e.ObjectID)
-			if err != nil {
-				return errors.Wrap(err, "failed to find source")
-			}
-
-			// we only send the source to the module that can handle it
-			for _, mod := range comp.getModules(source.Name) {
-				if err := mod.update(source); err != nil {
-					return errors.Wrap(err, "failed to identify source")
-				}
-			}
-			return nil
-		},
-		Events: []EventType{SOURCE_EVENT},
+func (f *componentFactory) makeClassifier() *Component {
+	sigs := f.sigs.SearchSingatures(Signature{Type: "classifier"})
+	return &Component{
+		Name:       "Classifier",
+		Handler:    componentEventHandler,
+		Events:     []EventType{FINGERPRINT_EVENT, HOST_EVENT},
+		Signatures: sigs,
 	}
 }
 
-func (c *composer) newScanner() *component {
-	return &component{
-		Name:    "scanner",
-		Adapter: c.adapter.componentAdapter(),
-		EventHandler: func(comp *componenet, e event) error {
-			scn, err := comp.adapter.getScan(e.ObjectID)
-			if err != nil {
-				return errors.Wrap(err, "failed to find source")
-			}
-			// we only send the source to the module that can handle it
-			for _, mod := range comp.getModules(scn.Name) {
-				if err := mod.update(scn); err != nil {
-					return errors.Wrap(err, "failed to identify source")
-				}
-			}
-			return nil
-		},
-		Events: []EventType{SCAN_EVENT},
+func (f *componentFactory) makeScanner() *Component {
+	sigs := f.sigs.SearchSingatures(Signature{Type: "scanner"})
+	return &Component{
+		Name:       "Scanner",
+		Handler:    componentEventHandler,
+		Events:     []EventType{SCAN_EVENT},
+		Signatures: sigs,
 	}
 }

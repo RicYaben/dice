@@ -1,0 +1,203 @@
+// Here are the collection of adapters. An adapter gives a part of DICE access to a bunch
+// of interfaces to communicate with storage, databases, etc.
+// They include an event bus to which emitters can listen to.
+package dice
+
+type EngineAdapter interface {
+	// Add a source
+	AddSource(...*Source) error
+	// Find sources in the current study
+	FindSources([]string) ([]Source, error)
+}
+
+type ComposerAdapter interface {
+	// Get a registered signature
+	GetSignature(uint) (Signature, error)
+	// Get a registered module
+	GetModule(uint) (Module, error)
+	// Get the roots of a registered signature
+	GetRoots(uint) ([]*Node, error)
+
+	// TODO: may need a query to search for required signatures
+	// recursively.
+	// Raw query for signatures
+	SearchSingatures(...Signature) []Signature
+
+	// Find signatures in the home directory
+	FindSignatures([]string) ([]Signature, error)
+	// Find in the home directory
+	FindModules([]string) ([]Module, error)
+
+	// Filter the registry
+	FilterReg(func(Module) bool) []*Module
+
+	// make a copy with a registry
+	withRegistry(registry) ComposerAdapter
+}
+
+type CosmosAdapter interface {
+	// Add a new Host (creates a host)
+	AddHost(...*Host) error
+	// Add a fingerprint to a host (creates a fingerprint)
+	AddFingerprint(...*Fingerprint) error
+	// Add a source of data (creates a source)
+	AddSource(...*Source) error
+	// Add a new scan (creates a scan)
+	AddScan(...*Scan) error
+	// Add a new label (creates a label)
+	AddLabel(...*Label) error
+
+	GetHost(uint) (Host, error)
+	GetFingerprint(uint) (Fingerprint, error)
+	GetSource(uint) (Source, error)
+	GetScan(uint) (Scan, error)
+	GetLabel(uint) (Label, error)
+
+	// Search the cosmos db for some results
+	Search(string) ([]string, error)
+}
+
+// A common intreface for most adapters
+// to send their events to.
+type eventBus func(Event) error
+
+type eventAdapter struct {
+	// Originator of the event
+	originID uint
+	bus      eventBus
+}
+
+func (a *eventAdapter) makeEvent(t EventType, id uint) error {
+	ev := Event{
+		NodeID:   a.originID,
+		Type:     t,
+		ObjectID: id,
+	}
+	return a.bus(ev)
+}
+
+type engineAdapter struct {
+	eventAdapter
+	repo *sourceRepo
+}
+
+func (a *engineAdapter) AddSource(s ...*Source) error {
+	return a.repo.addSource(s...)
+}
+
+func (a *engineAdapter) FindSources(s []string) ([]Source, error) {
+	return a.repo.findSources(s...)
+}
+
+type composerAdapter struct {
+	registry registry
+	repo     *signatureRepo
+}
+
+func (a *composerAdapter) GetSignature(id string) (Signature, error) {
+	return a.repo.getSignature(id)
+}
+
+func (a *composerAdapter) GetModule(id string) (Module, error) {
+	return a.repo.getModule(id)
+}
+
+func (a *composerAdapter) FindSignatures(names []string) ([]Signature, error) {
+	return a.repo.findSignatures(id)
+}
+
+func (a *composerAdapter) FindModules(names []string) ([]Module, error) {
+	return a.repo.findModules(id)
+}
+
+// TODO: dont know how to finish this
+func (a *composerAdapter) Cosmos(id uint) *cosmosAdapter {
+	return &cosmosAdapter{}
+}
+
+func (a *composerAdapter) withRegistry(r registry) *composerAdapter {
+	return &composerAdapter{r, a.repo}
+}
+
+type cosmosAdapter struct {
+	eventBus
+	repo *cosmosRepo
+}
+
+func (a *cosmosAdapter) AddHost(h ...*Host) error {
+	return a.repo.addHost(h...)
+}
+
+func (a *cosmosAdapter) AddFingerprint(f ...*Fingerprint) error {
+	return a.repo.addFingerprint(f...)
+}
+
+func (a *cosmosAdapter) AddSource(s ...*Source) error {
+	return a.repo.addSource(s...)
+}
+
+func (a *cosmosAdapter) AddLabel(l ...*Label) error {
+	return a.repo.addLabel(l...)
+}
+
+func (a *cosmosAdapter) AddScan(s ...*Scan) error {
+	return a.repo.addScan(s...)
+}
+
+func (a *cosmosAdapter) GetHost(id uint) (Host, error) {
+	return a.repo.getHost(id)
+}
+
+func (a *cosmosAdapter) GetFingerprint(id uint) (Fingerprint, error) {
+	return a.repo.getFingerprint(id)
+}
+
+func (a *cosmosAdapter) GetSource(id uint) (Source, error) {
+	return a.repo.getSource(id)
+}
+
+func (a *cosmosAdapter) GetLabel(id uint) (Label, error) {
+	return a.repo.getLabel(id)
+}
+
+func (a *cosmosAdapter) GetScan(id uint) (Scan, error) {
+	return a.repo.getScan(id)
+}
+
+func (a *cosmosAdapter) Search(q string) ([]string, error) {
+	return a.repo.search(q)
+}
+
+// Adapters factory
+type adapterFactory struct {
+	eventBus
+	repos *repositoryRegistry
+}
+
+func MakeAdapters(bus eventBus, home, workspace string) *adapterFactory {
+	return &adapterFactory{
+		bus,
+		newRepositoryFactory(home, workspace),
+	}
+}
+
+func (f *adapterFactory) Cosmos() *cosmosAdapter {
+	return &cosmosAdapter{
+		eventBus: f.eventBus,
+		repo:     f.repos.Cosmos(),
+	}
+}
+
+func (f *adapterFactory) Engine() *engineAdapter {
+	return &engineAdapter{
+		eventBus: f.eventBus,
+		repo:     f.repos.Sources(),
+	}
+}
+
+func (f *adapterFactory) Composer() *composerAdapter {
+	return &composerAdapter{
+		eventBus: f.eventBus,
+		repo:     f.repos.Signatures(),
+	}
+}

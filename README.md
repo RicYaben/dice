@@ -17,7 +17,7 @@
 
 </div>
 
-DICE is an engine to help orchestrating network measurements.
+__DICE is an engine to orchestrate network measurements.__
 At the core, DICE falls into the category of vulnerability identification.
 It was first thought as a tool for Internet surveys and monitoring networks, a far broader scope than single host scanning.
 However, DICE can be used at many different levels.

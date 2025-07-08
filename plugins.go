@@ -1,9 +1,9 @@
 package dice
 
 import (
-	"fmt"
 	"net/rpc"
 	"os/exec"
+	"path"
 
 	"github.com/hashicorp/go-plugin"
 )
@@ -111,25 +111,25 @@ type dicePlugin struct {
 type pluginFactory struct {
 	modulesPath string
 	plugins     map[string]plugin.Plugin
-	registered  map[ModuleModel]*dicePlugin
+	registered  map[uint]*dicePlugin
 }
 
 func newPluginFactory(path string) *pluginFactory {
 	return &pluginFactory{
 		modulesPath: path,
 		plugins:     pluginMap,
-		registered:  make(map[ModuleModel]*dicePlugin),
+		registered:  make(map[uint]*dicePlugin),
 	}
 }
 
 // Makes a new client for some specific plugin
-func (f *pluginFactory) loadPlugin(m ModuleModel) (*dicePlugin, error) {
+func (f *pluginFactory) loadPlugin(m Module) (*dicePlugin, error) {
 	client := plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig: plugin.HandshakeConfig{
 			ProtocolVersion: 1,
 		},
 		Plugins: pluginMap,
-		Cmd:     exec.Command(fmt.Sprintf("%s/%s/%s", f.modulesPath, m.Type, m.Source)),
+		Cmd:     exec.Command(path.Join(f.modulesPath, m.Type, m.Location)),
 	})
 
 	rpcClient, err := client.Client()
@@ -147,10 +147,10 @@ func (f *pluginFactory) loadPlugin(m ModuleModel) (*dicePlugin, error) {
 		raw:    raw,
 	}
 
-	f.registered[m] = p
+	f.registered[m.ID] = p
 	return p, nil
 }
 
-func (f *pluginFactory) getModule(m ModuleModel) *dicePlugin {
-	return f.registered[m]
+func (f *pluginFactory) getModule(m Module) *dicePlugin {
+	return f.registered[m.ID]
 }

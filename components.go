@@ -1,9 +1,7 @@
 package dice
 
 import (
-	"sync"
-
-	"github.com/pkg/errors"
+	"slices"
 )
 
 type Emitter interface {
@@ -16,126 +14,67 @@ type Emitter interface {
 
 type eventEmitter struct {
 	// Map of event types and its subscribers
-	subs map[string][]Component
+	subs map[EventType][]Component
 }
 
 func newEventEmitter() *eventEmitter {
-	return &eventEmitter{subs: make(map[string][]Component)}
+	return &eventEmitter{subs: make(map[EventType][]Component)}
 }
 
 func (m *eventEmitter) subscribe(comp Component) {
-	for _, t := range comp.tags() {
+	for _, t := range comp.Events {
 		m.subs[t] = append(m.subs[t], comp)
 	}
 }
 
 func (m *eventEmitter) emit(e Event) error {
-	for _, s := range m.subs[string(e.EventType)] {
+	for _, s := range m.subs[e.Type] {
 		return s.update(e)
 	}
 	return nil
 }
 
-type Component interface {
-	name() string
-	// register a module
-	register(Module) error
-	// downstream an event into the registered modules
-	update(Event) error
-	// type of events this component is subscribed to
-	tags() []string
-}
-
-type component struct {
-	name        string
-	modules     map[uint]Module
-	entrypoints []Module
-	tags        []string
-	adapter     *cosmosAdapter
-	handler     func(*component, Event) error
-
-	mu sync.Mutex
-}
-
-func newComponent(name string, adapter *cosmosAdapter) *component {
-	return &component{
-		mu:          sync.Mutex{},
-		modules:     make(map[uint]Module),
-		entrypoints: []Module{},
-		name:        name,
-		adapter:     adapter,
-	}
-}
-func (c *component) register(m Module) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if _, ok := c.modules[m.ID()]; !ok {
-		return errors.Errorf("module %s already registered", m.ID())
-	}
-	c.modules[m.ID()] = m
-	return nil
+type Component struct {
+	// Name of the component
+	Name string
+	// An adapter to call operations on the cosmos database
+	Adapter CosmosAdapter
+	// A handler to interact with the event and update registered modules
+	Handler func(comp *Component, e Event) error
+	// Types of events the component listens to
+	Events []EventType
+	// List of signatures the component handles
+	Signatures []Signature
 }
 
 // Sends the event to the modules to handle.
 // If the event points to some object with hooks,
 // the event is only pushed to the hookers
-func (c *component) update(e Event) error {
-	return c.handler(c, e)
-	/*
-		hooks, err := c.adapter.getHooks(e.ObjectID)
-		if err != nil {
-			return err
-		}
-
-		if len(hooks) > 0 {
-			for _, h := range hooks {
-				if mod, ok := c.modules[h]; ok {
-					if err := mod.update(e); err != nil {
-						return err
-					}
-				}
-			}
-		}
-
-		for _, m := range c.entrypoints {
-			if err := m.update(e); err != nil {
-				return err
-			}
-		}
-		return nil
-	*/
+func (c *Component) update(e Event) error {
+	return c.Handler(c, e)
 }
 
-type Module interface {
-	// returns the ID of the module
-	ID() uint
-	// handles an update in a subject
-	update(Event) error
-	// returns the children attached to this observer
-	getChildren() []Module
-	// propagate to the children
-	propagate(Event) error
-	// stops the module
-	kill()
+// Wrapper around a plugin to handle events and propagation
+type ComponentModule struct {
+	Module  Module
+	Adapter CosmosAdapter
+	Handler func(mod *ComponentModule, e Event) error
+
+	// this is the only important thing not to duplicate
+	Plugin   *dicePlugin
+	Children []ComponentModule
 }
 
-type module struct {
-	id       uint
-	children []Module
-	plugin   *dicePlugin
+// TODO: make wrappers for events and modules
+// Module wrappers are basically pre-component modules. Closely
+// related to nodes, b.c., we dont have scanners or identifiers
+// that are nodes in the signature graph
+func (m *ComponentModule) update(e Event) error {
+	return m.Handler(m, e)
 }
 
-func (m *module) ID() uint {
-	return m.id
-}
-
-func (m *module) getChildren() []Module {
-	return m.children
-}
-
-func (m *module) propagate(e Event) error {
-	for _, ch := range m.children {
+func (m *ComponentModule) Propagate(e Event) error {
+	for _, ch := range m.Children {
 		if err := ch.update(e); err != nil {
 			return err
 		}
@@ -143,28 +82,22 @@ func (m *module) propagate(e Event) error {
 	return nil
 }
 
-func (m *module) kill() {
-	m.plugin.client.Kill()
-}
+func componentEventHandler(comp *Component, e Event) error {
+	sigs := comp.Signatures
 
-type classifierModule struct {
-	*module
-	classifier ClassifierPlugin
-	adapter    *cosmosAdapter
-}
-
-func (m *classifierModule) update(e Event) error {
-	// find the host owning the object
-	host, err := m.adapter.getHost(e.ObjectID)
-	if err != nil {
-		return err
+	// Filter the targetted signatures
+	if len(e.Targets) > 0 {
+		sigs = Filter(sigs, func(s Signature) bool {
+			return slices.Contains(e.Targets, s.Name)
+		})
 	}
 
-	// the classifier has access to the adapter so it cant get
-	// whatever fingerprint or other info it needs, create a new
-	// scan if needed, etc.
-	if err := m.classifier.Label(host); err != nil {
-		return err
+	// Send the event to the remaining signatures
+	// Each should handle the event.
+	for _, sig := range sigs {
+		if err := sig.update(e); err != nil {
+			return err
+		}
 	}
-	return m.propagate(e)
+	return nil
 }
