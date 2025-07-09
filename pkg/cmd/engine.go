@@ -61,7 +61,7 @@ func (l *lazyLoader) preRunE(w WorkspaceFlags, e EngineFlags, c ComposerFlags) f
 		wk := __(w.Project, w.Study)
 
 		em := dice.NewEmitter()
-		ad := dice.MakeAdapters(em.emit, l.conf.Paths.STATE_HOME, wk)
+		ad := dice.MakeAdapters(em.Emit, l.conf.Paths.STATE_HOME, wk)
 		comp := dice.NewComposer(ad.Composer())
 
 		if err := comp.Stage("modules", c.Modules); err != nil {
