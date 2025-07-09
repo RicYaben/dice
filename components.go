@@ -9,7 +9,7 @@ type Emitter interface {
 	subscribe(Component)
 	// dispatch an event to a subject
 	// E.g., adding a label or a record
-	emit(e Event) error
+	Emit(e Event) error
 }
 
 type eventEmitter struct {
@@ -17,7 +17,7 @@ type eventEmitter struct {
 	subs map[EventType][]Component
 }
 
-func newEventEmitter() *eventEmitter {
+func NewEmitter() *eventEmitter {
 	return &eventEmitter{subs: make(map[EventType][]Component)}
 }
 
@@ -27,7 +27,7 @@ func (m *eventEmitter) subscribe(comp Component) {
 	}
 }
 
-func (m *eventEmitter) emit(e Event) error {
+func (m *eventEmitter) Emit(e Event) error {
 	for _, s := range m.subs[e.Type] {
 		return s.update(e)
 	}
@@ -95,7 +95,7 @@ func componentEventHandler(comp *Component, e Event) error {
 	// Send the event to the remaining signatures
 	// Each should handle the event.
 	for _, sig := range sigs {
-		if err := sig.update(e); err != nil {
+		if err := sig.Update(e); err != nil {
 			return err
 		}
 	}

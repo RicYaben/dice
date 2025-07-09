@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func initCommand(conf dice.Configuration) []*cobra.Command {
+func projectCommands(conf dice.Configuration) []*cobra.Command {
 	init := &cobra.Command{
 		Use:     "init [project_name]",
 		Short:   "Initialize a DICE project",

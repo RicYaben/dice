@@ -46,7 +46,9 @@ func Run() error {
 	// cfgFlags.StringVarP(&cfg.Profile, "profile", "u", string(dice.NO_PROFILE), "Initialize a DICE profile. ")
 	// fl.AddFlagSet(cfgFlags)
 
-	com.AddCommand(dice.Commands(conf)...)
+	com.AddCommand(engineCommands(conf)...)
+	com.AddCommand(projectCommands(conf)...)
+	com.AddCommand(signatureCommands(conf))
 
 	return com.Execute()
 }
