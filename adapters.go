@@ -85,6 +85,7 @@ type PluginAdapter interface {
 }
 
 type ProjectAdapter interface {
+	Find(result any, query []interface{}) error
 	AddProject(Project) error
 	AddStudy(Study) error
 }
