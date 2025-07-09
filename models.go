@@ -28,7 +28,8 @@ const (
 // around Modules to allow for links.
 // Their ID is different from their object ID.
 type Node struct {
-	ID uint
+	gorm.Model
+
 	// Signature this node belongs to
 	SignatureID uint
 
@@ -41,6 +42,9 @@ type Node struct {
 	// To find leaf nodes find by signatureID without any childs with the same
 	// signatureID
 	Children []*Node `gorm:"many2many:node_children;constraint:OnDelete:CASCADE"`
+
+	// Name used in the signature. Not useful in the db.
+	name string
 }
 
 type ModuleType string

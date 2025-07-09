@@ -66,7 +66,7 @@ Query: dice.Fingerprint{Name: "zmap-upnp"}
 
 Note this is only an example, and most identifiers will be able to handle data from a variety of sources.
 
-To find more about identifiers and other modules, check the [list of DICE commands](docs/commands.md). 
+To find more about identifiers and other modules, check the [list of DICE commands](docs/commands.md).
 
 ```bash
 // The complete DICE documentation 
