@@ -4,7 +4,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-const EngineID uint = 0xD1CE
+//const EngineID uint = 0xD1CE
 
 type engine struct {
 	adapter EngineAdapter

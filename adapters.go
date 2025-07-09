@@ -3,6 +3,15 @@
 // They include an event bus to which emitters can listen to.
 package dice
 
+type Adapters interface {
+	Engine() EngineAdapter
+	Cosmos() CosmosAdapter
+	Composer() ComposerAdapter
+	Signatures() SignatureAdapter
+	Projects() ProjectAdapter
+	Plugins() PluginAdapter
+}
+
 type EngineAdapter interface {
 	// Add a source
 	AddSource(...*Source) error
@@ -28,9 +37,6 @@ type ComposerAdapter interface {
 	// Find in the home directory
 	FindModules([]string) ([]Module, error)
 
-	// Filter the registry
-	FilterReg(func(Module) bool) []*Module
-
 	// make a copy with a registry
 	withRegistry(registry) ComposerAdapter
 }
@@ -55,6 +61,32 @@ type CosmosAdapter interface {
 
 	// Search the cosmos db for some results
 	Search(string) ([]string, error)
+}
+
+// Adapter to manipulate signatures and modules
+type SignatureAdapter interface {
+	Find(result any, query []interface{}) error
+	Remove(query []interface{}) error
+	Locate(model any, query []interface{}) ([]Location, error)
+	Update() error
+
+	// Loads a local signature.
+	AddSignatures(...Signature) error
+	// Loads a local module
+	AddModule(Module) error
+	// Get a registered signature
+	GetSignature(uint) (Signature, error)
+	// Get a registered module
+	GetModule(uint) (Module, error)
+}
+
+type PluginAdapter interface {
+	Load(string) (*dicePlugin, error)
+}
+
+type ProjectAdapter interface {
+	AddProject(Project) error
+	AddStudy(Study) error
 }
 
 // A common intreface for most adapters
@@ -168,6 +200,26 @@ func (a *cosmosAdapter) Search(q string) ([]string, error) {
 	return a.repo.search(q)
 }
 
+type signatureAdapter struct {
+	repo *signatureRepo
+}
+
+func (a *signatureAdapter) AddSignature(sig Signature) error {
+	panic("not implemented yet")
+}
+
+func (a *signatureAdapter) AddModule(mod Module) error {
+	panic("not implemented yet")
+}
+
+func (a *signatureAdapter) GetSignature(id uint) (Signature, error) {
+	panic("not implemented yet")
+}
+
+func (a *signatureAdapter) GetModule(id uint) (Module, error) {
+	panic("not implemented yet")
+}
+
 // Adapters factory
 type adapterFactory struct {
 	eventBus
@@ -190,14 +242,14 @@ func (f *adapterFactory) Cosmos() *cosmosAdapter {
 
 func (f *adapterFactory) Engine() *engineAdapter {
 	return &engineAdapter{
-		eventBus: f.eventBus,
-		repo:     f.repos.Sources(),
+		eventAdapter: eventAdapter{},
+		repo:         f.repos.Sources(),
 	}
 }
 
 func (f *adapterFactory) Composer() *composerAdapter {
 	return &composerAdapter{
-		eventBus: f.eventBus,
+		registry: registry{},
 		repo:     f.repos.Signatures(),
 	}
 }
