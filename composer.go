@@ -72,56 +72,79 @@ func (c *composer) Stage(t string, names []string) error {
 // Compose components from signatures and actions. Only load named comps.
 func (c *composer) Compose(names []string) ([]*Component, error) {
 	// make a component adapter with notion of a bunch of signatures
-	factory := &componentFactory{c.adapter.withRegistry(c.registry)}
+	ad := c.adapter.withRegistry(c.registry)
+	factory := &componentFactory{
+		sigs: ad,
+		reg:  newGraphRegistry(ad),
+	}
 	var comps []*Component
 	for _, n := range names {
-		if cmp := factory.makeComponent(n); cmp != nil {
-			comps = append(comps, cmp)
+		comp, err := factory.makeComponent(n)
+		if err != nil {
+			return nil, err
 		}
+		comps = append(comps, comp)
 	}
 	return comps, nil
 }
 
 type componentFactory struct {
 	sigs ComposerAdapter
+	reg  *graphRegistry
 }
 
-func (f *componentFactory) makeComponent(n string) *Component {
+func (f *componentFactory) makeComponent(n string) (comp *Component, err error) {
 	switch n {
 	case "identifier":
-		return f.makeIdentifier()
+		comp, err = f.makeIdentifier()
 	case "classifier":
-		return f.makeClassifier()
+		comp, err = f.makeClassifier()
 	case "scanner":
-		return f.makeScanner()
+		comp, err = f.makeScanner()
 	default:
-		return nil
+		return nil, errors.Errorf("component not found %s", n)
 	}
+	return
 }
 
-func (f *componentFactory) makeIdentifier() *Component {
+func (f *componentFactory) makeIdentifier() (*Component, error) {
 	sigs := f.sigs.SearchSingatures(Signature{Type: "identfier"})
+	g, err := f.reg.makeGraphs(sigs)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Component{
 		Name:   "Identifier",
 		Events: []EventType{SOURCE_EVENT},
-		Graphs: sigs,
-	}
+		Graphs: g,
+	}, nil
 }
 
-func (f *componentFactory) makeClassifier() *Component {
+func (f *componentFactory) makeClassifier() (*Component, error) {
 	sigs := f.sigs.SearchSingatures(Signature{Type: "classifier"})
+	g, err := f.reg.makeGraphs(sigs)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Component{
 		Name:   "Classifier",
 		Events: []EventType{FINGERPRINT_EVENT, HOST_EVENT},
-		Graphs: sigs,
-	}
+		Graphs: g,
+	}, nil
 }
 
-func (f *componentFactory) makeScanner() *Component {
+func (f *componentFactory) makeScanner() (*Component, error) {
 	sigs := f.sigs.SearchSingatures(Signature{Type: "scanner"})
+	g, err := f.reg.makeGraphs(sigs)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Component{
 		Name:   "Scanner",
 		Events: []EventType{SCAN_EVENT},
-		Graphs: sigs,
-	}
+		Graphs: g,
+	}, nil
 }

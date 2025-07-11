@@ -97,6 +97,28 @@ type graphRegistry struct {
 	nodes map[uint]GraphNode
 }
 
+func newGraphRegistry(ad ComposerAdapter) *graphRegistry {
+	return &graphRegistry{
+		adapter:      ad,
+		loadingSigs:  make(map[uint]struct{}),
+		loadingNodes: make(map[uint]struct{}),
+		graphs:       make(map[uint]*graph),
+		nodes:        make(map[uint]GraphNode),
+	}
+}
+
+func (r *graphRegistry) makeGraphs(sigs []Signature) ([]*graph, error) {
+	var graphs []*graph
+	for _, sig := range sigs {
+		g, err := r.makeGrpah(sig)
+		if err != nil {
+			return nil, err
+		}
+		graphs = append(graphs, g)
+	}
+	return graphs, nil
+}
+
 func (r *graphRegistry) makeGrpah(sig Signature) (*graph, error) {
 	// check if we are still loading the signature, i.e., on the path,
 	// but not yet registered
