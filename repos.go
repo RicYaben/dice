@@ -5,11 +5,14 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"time"
 
 	"github.com/pkg/errors"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+
+	"github.com/hashicorp/golang-lru/v2/expirable"
 )
 
 type DatabaseLocation string
@@ -150,6 +153,7 @@ func (r *sourceRepo) findSourceFiles(spath, sname string, globs []string) ([]*So
 
 type cosmosRepo struct {
 	Repository
+	cache *expirable.LRU[string, Host]
 }
 
 // returns a host by id
@@ -414,7 +418,9 @@ func (r *repositoryRegistry) Cosmos() *cosmosRepo {
 		setModels([]any{&Host{}, &Fingerprint{}, &Label{}, &Hook{}}).
 		setName("cosmos.db").
 		build()
-	r.cosmos = &cosmosRepo{repo}
+
+	cache := expirable.NewLRU[string, Host](1e3, nil, 5*time.Minute)
+	r.cosmos = &cosmosRepo{repo, cache}
 	return r.cosmos
 }
 

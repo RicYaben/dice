@@ -96,10 +96,10 @@ type Host struct {
 type Hook struct {
 	gorm.Model
 
-	// Hooked host
-	HostID uint
+	// Hooked object
+	ObjectID uint
 	// Hooked module
-	ModuleID uint
+	NodeID uint
 	// Whether the module is done with the object
 	Done bool
 }

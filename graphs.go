@@ -18,6 +18,8 @@ type Graph interface {
 type GraphNode interface {
 	// Handle an event
 	Update(Event) error
+	// Name of the node
+	Name() string
 	// add a dependant children
 	addChild(GraphNode)
 }
@@ -50,6 +52,10 @@ func (n *graphNode) Update(e Event) error {
 	return n.handler(n, e)
 }
 
+func (n *graphNode) Name() string {
+	return n.module.Name
+}
+
 func (n *graphNode) propagate(e Event) error {
 	for _, ch := range n.children {
 		if err := ch.Update(e); err != nil {
@@ -74,6 +80,10 @@ type embeddedGraphNode struct {
 
 func (n *embeddedGraphNode) Update(e Event) error {
 	return n.graph.Update(e)
+}
+
+func (n *embeddedGraphNode) Name() string {
+	return n.graph.signature.Name
 }
 
 func (n *embeddedGraphNode) addChild(gnode GraphNode) {
@@ -105,6 +115,24 @@ func newGraphRegistry(ad ComposerAdapter) *graphRegistry {
 		graphs:       make(map[uint]*graph),
 		nodes:        make(map[uint]GraphNode),
 	}
+}
+
+func (r *graphRegistry) entrypoints(sigs []Signature) ([]GraphNode, error) {
+	nodes := make([]GraphNode, 0, len(sigs))
+	graphs, err := r.makeGraphs(sigs)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, g := range graphs {
+		gnode := &embeddedGraphNode{
+			// NOTE: this is a bit junky, dont really like this
+			ID:    0,
+			graph: g,
+		}
+		nodes = append(nodes, gnode)
+	}
+	return nodes, nil
 }
 
 func (r *graphRegistry) makeGraphs(sigs []Signature) ([]*graph, error) {

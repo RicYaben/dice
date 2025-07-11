@@ -1,6 +1,8 @@
 package dice
 
 import (
+	"slices"
+
 	"github.com/pkg/errors"
 )
 
@@ -74,8 +76,8 @@ func (c *composer) Compose(names []string) ([]*Component, error) {
 	// make a component adapter with notion of a bunch of signatures
 	ad := c.adapter.withRegistry(c.registry)
 	factory := &componentFactory{
-		sigs: ad,
-		reg:  newGraphRegistry(ad),
+		compAdapter: ad,
+		reg:         newGraphRegistry(ad),
 	}
 	var comps []*Component
 	for _, n := range names {
@@ -89,8 +91,9 @@ func (c *composer) Compose(names []string) ([]*Component, error) {
 }
 
 type componentFactory struct {
-	sigs ComposerAdapter
-	reg  *graphRegistry
+	compAdapter ComposerAdapter
+	cosmos      CosmosAdapter
+	reg         *graphRegistry
 }
 
 func (f *componentFactory) makeComponent(n string) (comp *Component, err error) {
@@ -108,43 +111,92 @@ func (f *componentFactory) makeComponent(n string) (comp *Component, err error) 
 }
 
 func (f *componentFactory) makeIdentifier() (*Component, error) {
-	sigs := f.sigs.SearchSingatures(Signature{Type: "identfier"})
-	g, err := f.reg.makeGraphs(sigs)
+	sigs := f.compAdapter.SearchSignatures(Signature{Type: "identfier"})
+	eps, err := f.reg.entrypoints(sigs)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Component{
-		Name:   "Identifier",
-		Events: []EventType{SOURCE_EVENT},
-		Graphs: g,
+		Name:    "Identifier",
+		Adapter: f.cosmos,
+		Events:  []EventType{SOURCE_EVENT},
+		Nodes:   f.hookedComponentNodes(eps),
 	}, nil
 }
 
 func (f *componentFactory) makeClassifier() (*Component, error) {
-	sigs := f.sigs.SearchSingatures(Signature{Type: "classifier"})
-	g, err := f.reg.makeGraphs(sigs)
+	sigs := f.compAdapter.SearchSignatures(Signature{Type: "classifier"})
+	eps, err := f.reg.entrypoints(sigs)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Component{
-		Name:   "Classifier",
-		Events: []EventType{FINGERPRINT_EVENT, HOST_EVENT},
-		Graphs: g,
+		Name:    "Classifier",
+		Adapter: f.cosmos,
+		Events:  []EventType{FINGERPRINT_EVENT, HOST_EVENT},
+		Nodes:   f.hookedComponentNodes(eps),
 	}, nil
 }
 
 func (f *componentFactory) makeScanner() (*Component, error) {
-	sigs := f.sigs.SearchSingatures(Signature{Type: "scanner"})
-	g, err := f.reg.makeGraphs(sigs)
+	sigs := f.compAdapter.SearchSignatures(Signature{Type: "scanner"})
+	eps, err := f.reg.entrypoints(sigs)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Component{
-		Name:   "Scanner",
-		Events: []EventType{SCAN_EVENT},
-		Graphs: g,
+		Name:    "Scanner",
+		Adapter: f.cosmos,
+		Events:  []EventType{SCAN_EVENT},
+		Nodes:   f.hookedComponentNodes(eps),
 	}, nil
+}
+
+func (f *componentFactory) hookedComponentNodes(ep []GraphNode) func(Event) []GraphNode {
+	hooks := hookedNodesHandler(f.cosmos, f.reg)
+	targets := targetNodesHandler(f.cosmos, ep)
+
+	return func(e Event) []GraphNode {
+		if n := hooks(e); n != nil {
+			return n
+		}
+
+		if n := targets(e); n != nil {
+			return n
+		}
+
+		return ep
+	}
+}
+
+// Returns the list of hooked nodes
+func hookedNodesHandler(c CosmosAdapter, r *graphRegistry) func(Event) []GraphNode {
+	return func(e Event) []GraphNode {
+		hooks := c.FindHooks(e.ObjectID)
+		if len(hooks) == 0 {
+			return nil
+		}
+		nodes := make([]GraphNode, 0, len(hooks))
+		for _, h := range hooks {
+			if node, ok := r.nodes[h.NodeID]; ok {
+				nodes = append(nodes, node)
+			}
+		}
+		return nodes
+	}
+}
+
+// Filter a list of nodes based on the event targets
+func targetNodesHandler(c CosmosAdapter, nodes []GraphNode) func(Event) []GraphNode {
+	return func(e Event) []GraphNode {
+		if len(e.Targets) > 0 {
+
+		}
+		return Filter(nodes, func(s GraphNode) bool {
+			return slices.Contains(e.Targets, s.Name())
+		})
+	}
 }

@@ -30,7 +30,7 @@ type ComposerAdapter interface {
 	// TODO: may need a query to search for required signatures
 	// recursively.
 	// Raw query for signatures
-	SearchSingatures(...Signature) []Signature
+	SearchSignatures(...Signature) []Signature
 
 	// Find signatures in the home directory
 	FindSignatures([]string) ([]Signature, error)
@@ -58,6 +58,9 @@ type CosmosAdapter interface {
 	GetSource(uint) (Source, error)
 	GetScan(uint) (Scan, error)
 	GetLabel(uint) (Label, error)
+
+	// Return a list of hooks
+	FindHooks(uint) []Hook
 
 	// Search the cosmos db for some results
 	Search(string) ([]string, error)

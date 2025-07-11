@@ -1,9 +1,5 @@
 package dice
 
-import (
-	"slices"
-)
-
 type Emitter interface {
 	// adds a component to a list of topics
 	subscribe(Component)
@@ -39,29 +35,19 @@ type Component struct {
 	Name string
 	// An adapter to call operations on the cosmos database
 	Adapter CosmosAdapter
+	// A wraper for getting the relevant nodes
+	// NOTE: graphs are also nodes, just wrapped (GraphNode)
+	Nodes func(e Event) []GraphNode
 	// Types of events the component listens to
 	Events []EventType
-	// List of signatures the component handles
-	Graphs []*graph
 }
 
 // Sends the event to the modules to handle.
 // If the event points to some object with hooks,
 // the event is only pushed to the hookers
 func (c *Component) update(e Event) error {
-	g := c.Graphs
-
-	// Filter the targetted signatures
-	if len(e.Targets) > 0 {
-		g = Filter(g, func(s *graph) bool {
-			return slices.Contains(e.Targets, s.signature.Name)
-		})
-	}
-
-	// Send the event to the remaining signatures
-	// Each should handle the event.
-	for _, sig := range g {
-		if err := sig.Update(e); err != nil {
+	for _, n := range c.Nodes(e) {
+		if err := n.Update(e); err != nil {
 			return err
 		}
 	}

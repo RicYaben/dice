@@ -32,6 +32,7 @@ require (
 
 require (
 	github.com/hashicorp/go-plugin v1.6.2
+	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/pkg/errors v0.9.1
