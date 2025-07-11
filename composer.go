@@ -102,29 +102,26 @@ func (f *componentFactory) makeComponent(n string) *Component {
 func (f *componentFactory) makeIdentifier() *Component {
 	sigs := f.sigs.SearchSingatures(Signature{Type: "identfier"})
 	return &Component{
-		Name:       "Identifier",
-		Handler:    componentEventHandler,
-		Events:     []EventType{SOURCE_EVENT},
-		Signatures: sigs,
+		Name:   "Identifier",
+		Events: []EventType{SOURCE_EVENT},
+		Graphs: sigs,
 	}
 }
 
 func (f *componentFactory) makeClassifier() *Component {
 	sigs := f.sigs.SearchSingatures(Signature{Type: "classifier"})
 	return &Component{
-		Name:       "Classifier",
-		Handler:    componentEventHandler,
-		Events:     []EventType{FINGERPRINT_EVENT, HOST_EVENT},
-		Signatures: sigs,
+		Name:   "Classifier",
+		Events: []EventType{FINGERPRINT_EVENT, HOST_EVENT},
+		Graphs: sigs,
 	}
 }
 
 func (f *componentFactory) makeScanner() *Component {
 	sigs := f.sigs.SearchSingatures(Signature{Type: "scanner"})
 	return &Component{
-		Name:       "Scanner",
-		Handler:    componentEventHandler,
-		Events:     []EventType{SCAN_EVENT},
-		Signatures: sigs,
+		Name:   "Scanner",
+		Events: []EventType{SCAN_EVENT},
+		Graphs: sigs,
 	}
 }

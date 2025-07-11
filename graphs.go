@@ -41,12 +41,22 @@ type graphNode struct {
 	module   Module
 	// TODO: this can be a wrapped callback to some connector,
 	// come back to this!
+	// Adapter CosmosAdapter
 	handler func(node *graphNode, e Event) error
 	plugin  *dicePlugin
 }
 
 func (n *graphNode) Update(e Event) error {
 	return n.handler(n, e)
+}
+
+func (n *graphNode) propagate(e Event) error {
+	for _, ch := range n.children {
+		if err := ch.Update(e); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (n *graphNode) addChild(gnode GraphNode) {
