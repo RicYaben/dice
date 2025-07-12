@@ -60,9 +60,9 @@ dice scan -M mqtt-topics,opcua-nodes,telnet-brute
 ### Q: Can I use DICE to classify previously gathered results?
 
 __Yes.__
-DICE can ingest results from a variety of sources, check out the current list of [compatible sources](docs/compatibility.md).
+DICE can ingest results from a variety of sources, check out the current list of [compatible sources](compatibility.md).
 
-__Q: How can I reference DICE in my publications?__
+### Q: How can I reference DICE in my publications?
 
 You should use the following reference.
 Thank you for helping DICE to improve!

@@ -66,7 +66,7 @@ Query: dice.Fingerprint{Name: "zmap-upnp"}
 
 Note this is only an example, and most identifiers will be able to handle data from a variety of sources.
 
-To find more about identifiers and other modules, check the [list of DICE commands](docs/commands.md).
+To find more about identifiers and other modules, check the [list of DICE commands](commands.md).
 
 ```bash
 // The complete DICE documentation 
@@ -94,4 +94,4 @@ dice -S routers --module-args 'user-agent="DICE"'
 ```
 
 While these expressions are sufficient to cover the vast majority of measurements, there may be use-cases we have not considered.
-If you find yourself limited by DICE, [get in contact with the team](docs/contact.md).
+If you find yourself limited by DICE, [get in contact with the team](contact.md).
