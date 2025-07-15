@@ -6,4 +6,4 @@ Our ambition is to provide with an idea of DICE's current state and future devel
 
 ## Tracking Boards
 
-* [v0.1 DICE Milestone](https://github.com/RicYaben/projects/5)
+* [v0.1 DICE Milestone](https://github.com/users/RicYaben/projects/5)
