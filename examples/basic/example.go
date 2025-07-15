@@ -1,42 +1,36 @@
 package basic
 
 import (
-	"github.com/dice"
 	"github.com/dice/pkg/sdk"
+	"github.com/dice/shared"
 	"github.com/pkg/errors"
 )
 
-// This handler will be wrapped every time is called
-func handle(cls *dice.Connector, h dice.Host) error {
-	fps, err := cls.Fingerprints("protocol:ssh auth:true", h)
+func handler(e shared.Event, m *sdk.Module, a shared.Adapter) error {
+	resp, err := a.Query([]any{e.Host(), "protocol:ssh auth:true"})
 	if err != nil {
 		return errors.Wrap(err, "failed to search for fingerprints")
 	}
 
+	fps := resp.([]shared.Fingerprint)
 	if len(fps) > 0 {
-		cls.Label("weak-access-control")
-		return cls.Propagate()
+		a.Label("weak-access-control", e.ID())
+		m.Propagate()
 	}
 
 	return nil
 }
 
-func Main() *sdk.ClassifierModule {
-	return &sdk.ClassifierModule{
-		// Name of the module
-		Name: "shh-brute",
-		// How to use the module
-		Help: "dice -M ssh-brute",
-		// What this classifier does
+func main() {
+	sdk.Serve(&sdk.Module{
+		Name:        "shh-brute",
+		Type:        "classifier",
+		Help:        "dice -M ssh-brute",
 		Description: "Whether the SSH service has weak auth",
-		// Pre-load data ahead of time.
-		// Classifiers request fingerprints!
-		Query: "protocol:ssh",
-		// If the query returns no results, this module
-		// will attempt to fire a scan event
-		Requirements: dice.Scan{
+		Query:       "protocol:ssh",
+		Requirements: shared.Scan{
 			Module: "scn",
-			Args: map[string]any{
+			Flags: map[string]any{
 				"ports":  22,
 				"probe":  "synack",
 				"module": "ssh-brute",
@@ -45,7 +39,5 @@ func Main() *sdk.ClassifierModule {
 				},
 			},
 		},
-		// The event handler
-		Handler: handle,
-	}
+	}, handler)
 }

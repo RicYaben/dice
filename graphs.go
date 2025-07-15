@@ -26,15 +26,22 @@ type GraphNode interface {
 
 // Implementation of Graph
 type graph struct {
+	// Original signature
 	signature Signature
-
-	leafs []GraphNode
+	// Root nodes of the graph
 	nodes []GraphNode
+	// Nodes without children
+	leafs []GraphNode
 }
 
-// TODO: continue here
+// Graphs just update their nodes
 func (g *graph) Update(e Event) error {
-	panic("not implemented yet")
+	for _, n := range g.nodes {
+		if err := n.Update(e); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type graphNode struct {
@@ -46,6 +53,10 @@ type graphNode struct {
 	// Adapter CosmosAdapter
 	handler func(node *graphNode, e Event) error
 	plugin  *dicePlugin
+}
+
+func NewGraphNode(id uint, m Module) *graphNode {
+	panic("not implemented yet")
 }
 
 func (n *graphNode) Update(e Event) error {

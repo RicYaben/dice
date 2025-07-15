@@ -39,8 +39,6 @@ func (s StandardPaths) init() error {
 	return nil
 }
 
-const UnsetFlag = "-"
-
 type stdpathsBuilder struct {
 	stdpaths *StandardPaths
 	home     string
@@ -62,7 +60,7 @@ func (b *stdpathsBuilder) withStdpaths(stdpaths *StandardPaths) *stdpathsBuilder
 }
 
 func (b *stdpathsBuilder) isValid(val string) bool {
-	return slices.Contains([]string{"", UnsetFlag}, val)
+	return slices.Contains([]string{"", "-"}, val)
 }
 
 func (b *stdpathsBuilder) bind(val, env, def string) string {

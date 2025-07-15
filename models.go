@@ -76,6 +76,15 @@ type Module struct {
 	Requires []Module
 }
 
+type Properties struct {
+	gorm.Model
+
+	Name        string
+	Help        string
+	Description string
+	Query       string
+}
+
 // A target-ish. It holds fingerprints and labels
 // related to a host during a measurement.
 type Host struct {
