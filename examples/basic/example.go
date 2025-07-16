@@ -1,23 +1,26 @@
 package basic
 
 import (
+	"fmt"
+
 	"github.com/dice/pkg/sdk"
 	"github.com/dice/shared"
 	"github.com/pkg/errors"
 )
 
 func handler(e shared.Event, m *sdk.Module, a shared.Adapter) error {
-	resp, err := a.Query([]any{e.Host(), "protocol:ssh auth:true"})
+	hosts, err := a.Query(fmt.Sprintf("protocol:ssh auth:true host:%d", e.ID()))
 	if err != nil {
 		return errors.Wrap(err, "failed to search for fingerprints")
 	}
 
-	fps := resp.([]shared.Fingerprint)
-	if len(fps) > 0 {
-		a.Label("weak-access-control", e.ID())
-		m.Propagate()
+	for _, h := range hosts {
+		a.Label(shared.Label{
+			HostID: h.ID,
+			Label:  "weak-access-control",
+		})
+		return m.Propagate()
 	}
-
 	return nil
 }
 
@@ -30,14 +33,14 @@ func main() {
 		Query:       "protocol:ssh",
 		Requirements: shared.Scan{
 			Module: "scn",
-			Flags: map[string]any{
+			Args: sdk.AsJSON(map[string]any{
 				"ports":  22,
 				"probe":  "synack",
 				"module": "ssh-brute",
 				"flags": []string{
 					"dictionary=root:root,admin:admin",
 				},
-			},
+			}),
 		},
 	}, handler)
 }

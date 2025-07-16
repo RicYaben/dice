@@ -1,6 +1,7 @@
 package sdk
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -29,7 +30,18 @@ type Module struct {
 }
 
 func (m *Module) Propagate() error { return nil }
-func (m *Module) Properties() (map[string]string, error)
+func (m *Module) Properties() (map[string]string, error) {
+	b, err := json.Marshal(m)
+	if err != nil {
+		return nil, err
+	}
+
+	var p map[string]string
+	if err := json.Unmarshal(b, &p); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
 
 type Handler func(e shared.Event, m *Module, a shared.Adapter) error
 

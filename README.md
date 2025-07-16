@@ -94,8 +94,8 @@ Check out our [frequently asked questions](docs/faq.md) to figure what DICE can 
     To list all known to DICE use the following command:
 
     ```sh
-    # Syntaxt to list (all) modules, signatures, or projects
-    dice list [-M modules | -S signatures | -P projects] [--all]
+    # List all modules
+    dice modules list --all
     ```
 
     For more information on DICE's commands and configuration options check out [the list of commands](docs/commands.md).
@@ -113,7 +113,7 @@ To start using DICE, we only need to tell the engine which actions we want to us
 
 __Note:__ You do not need to initialize a new project to start using DICE, although, it is highly recommended.
 
-```bash
+```sh
 # Scan the whole IPv4 using a single signature
 dice scan -S router
 ```
@@ -133,7 +133,7 @@ However, DICE can do much more, and as with many other tools, the simplest and m
 Big part of measurements and network analysis is the ability to replay results, and as such, DICE includes commands to ingest data from different sources and classify using a set of modules or full signatures.
 This allows for predictive and deterministic results, helping to share and compare processing pipelines and metrics.
 
-```bash
+```sh
 # Classify previously collected zgrab2 records using all signatures 
 # that start with "iot-" or "ot-" 
 dice classify -S "iot-*,ot-*" --source zgrab2 

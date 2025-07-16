@@ -3,6 +3,7 @@ package shared
 import (
 	"context"
 
+	"github.com/dice/proto"
 	"github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
 )
@@ -30,12 +31,12 @@ type Adapter interface {
 	GetSource(uint) (Source, error)
 	GetScan(uint) (Scan, error)
 
-	Query([]any) (any, error)
+	Label(Label) error
+	Fingerprint(Fingerprint) error
+	Scan(Scan) error
+	Source(Source) error
 
-	Label(lab string, host uint) error
-	Fingerprint(fp string, host uint) error
-	Scan(sc string, targets []string) error
-	Source(fpath string, format string) error
+	Query(string) ([]Host, error)
 }
 
 // Modules are how we call DICE plugins. Each module uses a
@@ -58,10 +59,11 @@ type ModulePlugin struct {
 }
 
 func (p *ModulePlugin) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server) error {
-	return proto.RegisterModuleServer(s, &GRPCModuleServer{
+	proto.RegisterModuleServer(s, &GRPCModuleServer{
 		Impl:   p.Impl,
 		broker: broker,
 	})
+	return nil
 }
 
 func (p *ModulePlugin) GRPCClient(ctx context.Context, broker *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {

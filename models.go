@@ -76,15 +76,6 @@ type Module struct {
 	Requires []Module
 }
 
-type Properties struct {
-	gorm.Model
-
-	Name        string
-	Help        string
-	Description string
-	Query       string
-}
-
 // A target-ish. It holds fingerprints and labels
 // related to a host during a measurement.
 type Host struct {
@@ -139,13 +130,13 @@ type Scan struct {
 	Args map[string]any
 }
 
-// A classification label assigned to a fingerprint
+// A classification label assigned to a host
 // It just has a name.
 type Label struct {
 	gorm.Model
 
-	FingerprintID uint
-	ModuleID      uint
+	HostID   uint
+	ModuleID uint
 
 	Name string
 }
