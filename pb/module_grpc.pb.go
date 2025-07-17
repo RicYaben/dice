@@ -2,9 +2,9 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v3.12.4
-// source: module.proto
+// source: proto/module.proto
 
-package proto
+package pb
 
 import (
 	context "context"
@@ -194,7 +194,7 @@ var Module_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "module.proto",
+	Metadata: "proto/module.proto",
 }
 
 const (
@@ -205,6 +205,7 @@ const (
 	Adapter_AddFingerprint_FullMethodName = "/proto.Adapter/AddFingerprint"
 	Adapter_AddScan_FullMethodName        = "/proto.Adapter/AddScan"
 	Adapter_AddSource_FullMethodName      = "/proto.Adapter/AddSource"
+	Adapter_LabelHost_FullMethodName      = "/proto.Adapter/LabelHost"
 	Adapter_Query_FullMethodName          = "/proto.Adapter/Query"
 )
 
@@ -219,6 +220,7 @@ type AdapterClient interface {
 	AddFingerprint(ctx context.Context, in *Fingerprint, opts ...grpc.CallOption) (*Empty, error)
 	AddScan(ctx context.Context, in *Scan, opts ...grpc.CallOption) (*Empty, error)
 	AddSource(ctx context.Context, in *Source, opts ...grpc.CallOption) (*Empty, error)
+	LabelHost(ctx context.Context, in *LabelHostRequest, opts ...grpc.CallOption) (*Empty, error)
 	Query(ctx context.Context, in *QueryRequest, opts ...grpc.CallOption) (*QueryResponse, error)
 }
 
@@ -300,6 +302,16 @@ func (c *adapterClient) AddSource(ctx context.Context, in *Source, opts ...grpc.
 	return out, nil
 }
 
+func (c *adapterClient) LabelHost(ctx context.Context, in *LabelHostRequest, opts ...grpc.CallOption) (*Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, Adapter_LabelHost_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *adapterClient) Query(ctx context.Context, in *QueryRequest, opts ...grpc.CallOption) (*QueryResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(QueryResponse)
@@ -321,6 +333,7 @@ type AdapterServer interface {
 	AddFingerprint(context.Context, *Fingerprint) (*Empty, error)
 	AddScan(context.Context, *Scan) (*Empty, error)
 	AddSource(context.Context, *Source) (*Empty, error)
+	LabelHost(context.Context, *LabelHostRequest) (*Empty, error)
 	Query(context.Context, *QueryRequest) (*QueryResponse, error)
 	mustEmbedUnimplementedAdapterServer()
 }
@@ -352,6 +365,9 @@ func (UnimplementedAdapterServer) AddScan(context.Context, *Scan) (*Empty, error
 }
 func (UnimplementedAdapterServer) AddSource(context.Context, *Source) (*Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AddSource not implemented")
+}
+func (UnimplementedAdapterServer) LabelHost(context.Context, *LabelHostRequest) (*Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method LabelHost not implemented")
 }
 func (UnimplementedAdapterServer) Query(context.Context, *QueryRequest) (*QueryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Query not implemented")
@@ -503,6 +519,24 @@ func _Adapter_AddSource_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Adapter_LabelHost_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LabelHostRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdapterServer).LabelHost(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Adapter_LabelHost_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdapterServer).LabelHost(ctx, req.(*LabelHostRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Adapter_Query_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(QueryRequest)
 	if err := dec(in); err != nil {
@@ -557,10 +591,14 @@ var Adapter_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Adapter_AddSource_Handler,
 		},
 		{
+			MethodName: "LabelHost",
+			Handler:    _Adapter_LabelHost_Handler,
+		},
+		{
 			MethodName: "Query",
 			Handler:    _Adapter_Query_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "module.proto",
+	Metadata: "proto/module.proto",
 }

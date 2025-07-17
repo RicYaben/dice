@@ -2,7 +2,10 @@ package dice
 
 import (
 	"encoding/json"
+	"os/exec"
 
+	"github.com/dice/shared"
+	"github.com/hashicorp/go-plugin"
 	"github.com/pkg/errors"
 )
 
@@ -29,4 +32,28 @@ func Filter[T any](s []T, fn func(T) bool) []T {
 		}
 	}
 	return r
+}
+
+func LoadModule(m Module) (shared.Module, error) {
+	client := plugin.NewClient(&plugin.ClientConfig{
+		HandshakeConfig: shared.HandshakeConfig,
+		Plugins:         shared.PluginMap,
+		Cmd:             exec.Command("sh", "-c", m.Location),
+		AllowedProtocols: []plugin.Protocol{
+			plugin.ProtocolNetRPC, plugin.ProtocolGRPC,
+		},
+	})
+
+	rpcClient, err := client.Client()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to load module %s", m.Name)
+	}
+
+	raw, err := rpcClient.Dispense(m.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	module := raw.(shared.Module)
+	return module, nil
 }

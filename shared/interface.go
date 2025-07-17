@@ -3,7 +3,7 @@ package shared
 import (
 	"context"
 
-	"github.com/dice/proto"
+	"github.com/dice/pb"
 	"github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
 )
@@ -14,7 +14,7 @@ var HandshakeConfig = plugin.HandshakeConfig{
 	MagicCookieValue: "DICE",
 }
 
-var pluginMap = map[string]plugin.Plugin{
+var PluginMap = map[string]plugin.Plugin{
 	"scanner":    &ModulePlugin{},
 	"identifier": &ModulePlugin{},
 	"classifier": &ModulePlugin{},
@@ -27,16 +27,16 @@ var pluginMap = map[string]plugin.Plugin{
 // is comming from, etc.
 // All adapters share a common cache.
 type Adapter interface {
-	GetHost(uint) (Host, error)
-	GetSource(uint) (Source, error)
-	GetScan(uint) (Scan, error)
+	GetHost(uint) (*Host, error)
+	GetSource(uint) (*Source, error)
+	GetScan(uint) (*Scan, error)
 
-	Label(Label) error
-	Fingerprint(Fingerprint) error
-	Scan(Scan) error
-	Source(Source) error
+	AddLabel(*Label) error
+	AddFingerprint(*Fingerprint) error
+	AddScan(*Scan) error
+	AddSource(*Source) error
 
-	Query(string) ([]Host, error)
+	Query(string) ([]*Host, error)
 }
 
 // Modules are how we call DICE plugins. Each module uses a
@@ -59,7 +59,7 @@ type ModulePlugin struct {
 }
 
 func (p *ModulePlugin) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server) error {
-	proto.RegisterModuleServer(s, &GRPCModuleServer{
+	pb.RegisterModuleServer(s, &GRPCModuleServer{
 		Impl:   p.Impl,
 		broker: broker,
 	})
@@ -68,7 +68,7 @@ func (p *ModulePlugin) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server) err
 
 func (p *ModulePlugin) GRPCClient(ctx context.Context, broker *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
 	return &GRPCClient{
-		client: proto.NewModuleClient(c),
+		client: pb.NewModuleClient(c),
 		broker: broker,
 	}, nil
 }

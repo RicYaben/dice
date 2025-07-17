@@ -83,9 +83,9 @@ type Host struct {
 
 	Ip           string
 	Domain       string
-	Hooks        []Hook        `gorm:"foreignKey:ID"`
-	Fingerprints []Fingerprint `gorm:"foreignKey:ID"`
-	Labels       []Label       `gorm:"foreignKey:ID"`
+	Hooks        []*Hook        `gorm:"foreignKey:ID"`
+	Fingerprints []*Fingerprint `gorm:"foreignKey:ID"`
+	Labels       []*Label       `gorm:"foreignKey:ID"`
 }
 
 // Hook is a reference to a module.
@@ -111,9 +111,13 @@ type Fingerprint struct {
 	// Which module made it
 	ModuleID uint
 	// The fingerprint
-	Data map[string]any
+	Data datatypes.JSON
 	// Hash value of the fingerprint's data
-	//Hash string
+
+	Hash     string
+	Service  string
+	Protocol string
+	Port     uint16
 }
 
 // A scan is a type of command that scanners can interpret
@@ -122,23 +126,29 @@ type Fingerprint struct {
 type Scan struct {
 	gorm.Model
 
-	// Origin of the scan. Either signature or scan.
-	// is the same as saying the type and the name...
-	Signature string
-	Module    string
+	ModuleID uint
+	// List of targets
+	Targets []string
 	// Argument to pass to the scanner
-	Args map[string]any
+	Args datatypes.JSON
 }
 
 // A classification label assigned to a host
-// It just has a name.
 type Label struct {
 	gorm.Model
 
-	HostID   uint
 	ModuleID uint
-
-	Name string
+	// short name of the label, e.g., broken-access-control
+	// This should be unique in the module
+	ShortName string
+	// Long name of the label. e.g.,
+	// "MQTT broken access control - failed authentication"
+	LongName string
+	// Description of the label, e.g.,
+	// why and when a host is assigned this label
+	Description string
+	// Mitigation advice
+	Mitigation string
 }
 
 type SourceType string
@@ -198,5 +208,7 @@ type Event struct {
 	ObjectID uint
 
 	// For direct delivery. Signature names
+	// TODO: this should be tags! tags are set as properties in
+	// signatures
 	Targets []string
 }

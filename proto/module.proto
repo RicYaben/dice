@@ -1,6 +1,7 @@
 syntax = "proto3";
 package proto;
-option go_package = "./proto";
+option go_package = "pb/";
+import "proto/models.proto";
 
 message Empty {}
 
@@ -24,42 +25,6 @@ service Module {
     rpc Handle(HandleRequest) returns (Empty);
 }
 
-message Host {
-    uint32 id = 1;
-    string address = 2;
-    repeated Fingerprint fingerprints = 3;
-}
-
-message Fingerprint {
-    uint32 id = 1;
-    uint32 hostID = 2;
-    // json data
-    bytes data = 3;
-    string service = 4;
-    string protocol = 5;
-    uint32 port = 6;
-}
-
-message Label {
-    uint32 id = 1;
-    uint32 hostID = 2;
-    string label = 3;
-}
-
-message Scan {
-    uint32 id = 1;
-    repeated string targets = 2;
-    string flags = 3;
-    string module = 4;
-}
-
-message Source {
-    uint32 id = 1;
-    string format = 2;
-    string path = 3;
-    string scanner = 5;
-}
-
 message IDRequest {
     uint32 id = 1;
 }
@@ -72,6 +37,11 @@ message QueryResponse {
     repeated Host hosts = 1;
 }
 
+message LabelHostRequest{
+    uint32 host_id=1;
+    string label=2;
+}
+
 service Adapter {
     rpc GetHost(IDRequest) returns (Host);
     rpc GetSource(IDRequest) returns (Source);
@@ -81,6 +51,8 @@ service Adapter {
     rpc AddFingerprint(Fingerprint) returns (Empty);
     rpc AddScan(Scan) returns (Empty);
     rpc AddSource(Source) returns (Empty);
+
+    rpc LabelHost(LabelHostRequest) returns (Empty);
 
     rpc Query(QueryRequest) returns (QueryResponse);
 }

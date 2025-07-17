@@ -15,10 +15,7 @@ func handler(e shared.Event, m *sdk.Module, a shared.Adapter) error {
 	}
 
 	for _, h := range hosts {
-		a.Label(shared.Label{
-			HostID: h.ID,
-			Label:  "weak-access-control",
-		})
+		a.LabelHost(h.ID, "weak-access-control")
 		return m.Propagate()
 	}
 	return nil
@@ -31,16 +28,16 @@ func main() {
 		Help:        "dice -M ssh-brute",
 		Description: "Whether the SSH service has weak auth",
 		Query:       "protocol:ssh",
-		Requirements: shared.Scan{
-			Module: "scn",
-			Args: sdk.AsJSON(map[string]any{
-				"ports":  22,
-				"probe":  "synack",
-				"module": "ssh-brute",
-				"flags": []string{
-					"dictionary=root:root,admin:admin",
-				},
-			}),
-		},
+		// Requirements: shared.Scan{
+		// 	Module: "scn",
+		// 	Args: sdk.AsJSON(map[string]any{
+		// 		"ports":  22,
+		// 		"probe":  "synack",
+		// 		"module": "ssh-brute",
+		// 		"flags": []string{
+		// 			"dictionary=root:root,admin:admin",
+		// 		},
+		// 	}),
+		// },
 	}, handler)
 }

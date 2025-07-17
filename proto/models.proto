@@ -1,0 +1,42 @@
+syntax = "proto3";
+package proto;
+option go_package = "pb/";
+
+message Host {
+  uint32 id = 1;
+  string ip = 2;
+  string domain = 3;
+  repeated Fingerprint fingerprints = 4;
+  repeated Label labels = 5;
+}
+
+message Fingerprint {
+  uint32 id = 1;
+  uint32 host_id = 2;
+  bytes data = 3;
+  string service = 4;
+  string protocol = 5;
+  uint32 port = 6;
+}
+
+message Scan {
+  uint32 id = 1;
+  repeated string targets = 2;
+  bytes args = 3;
+}
+
+message Label {
+  string short_name = 1;
+  string long_name = 2;
+  string description = 3;
+  string mitigation = 4;
+}
+
+message Source {
+  uint32 id = 1;
+  string location = 2;
+  string format = 3;
+  string scanner = 4;
+  string type = 5;
+  bytes args = 6;
+}

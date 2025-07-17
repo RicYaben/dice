@@ -32,11 +32,12 @@ __Table of Conent__
 
 # USAGE
 
-Here you can find a quick guide to intall and start using DICE.
+> [!TIP]
+> DICE may be an overkill for simpler measurements (e.g., SYN-ACK scans).
+> Check out our [frequently asked questions](docs/faq.md) to figure what DICE can do for you.
+> As an engine to orchestrate measurements, use cases may vary greatly.
 
-> __Note:__ as an engine to orchestrate measurements, use cases may vary greatly.
-For simpler measurements (e.g., simple SYN-ACK scans), DICE may be an overkill.
-Check out our [frequently asked questions](docs/faq.md) to figure what DICE can do for you.
+Here you can find a quick guide to intall and start using DICE.
 
 ## Installation
 

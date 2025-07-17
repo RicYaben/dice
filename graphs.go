@@ -3,6 +3,7 @@ package dice
 import (
 	"slices"
 
+	"github.com/dice/shared"
 	"github.com/pkg/errors"
 )
 
@@ -45,14 +46,12 @@ func (g *graph) Update(e Event) error {
 }
 
 type graphNode struct {
-	ID       uint
-	children []GraphNode
-	module   Module
-	// TODO: this can be a wrapped callback to some connector,
-	// come back to this!
-	// Adapter CosmosAdapter
-	handler func(node *graphNode, e Event) error
-	plugin  *dicePlugin
+	ID     uint
+	Module Module
+
+	children  []GraphNode
+	connector *Connector
+	module    shared.Module
 }
 
 func NewGraphNode(id uint, m Module) *graphNode {
@@ -60,11 +59,12 @@ func NewGraphNode(id uint, m Module) *graphNode {
 }
 
 func (n *graphNode) Update(e Event) error {
-	return n.handler(n, e)
+	ev := shared.NewEvent(string(e.Type), e.ID)
+	return n.module.Handle(ev, n.connector)
 }
 
 func (n *graphNode) Name() string {
-	return n.module.Name
+	return n.Module.Name
 }
 
 func (n *graphNode) propagate(e Event) error {
@@ -267,7 +267,7 @@ func (r *graphRegistry) makeGraphNode(node *Node) (*graphNode, error) {
 
 	gnode := &graphNode{
 		ID:     node.ID,
-		module: nmod,
+		Module: nmod,
 	}
 
 	return gnode, nil

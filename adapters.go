@@ -53,17 +53,20 @@ type CosmosAdapter interface {
 	// Add a new label (creates a label)
 	AddLabel(...*Label) error
 
-	GetHost(uint) (Host, error)
-	GetFingerprint(uint) (Fingerprint, error)
-	GetSource(uint) (Source, error)
-	GetScan(uint) (Scan, error)
-	GetLabel(uint) (Label, error)
+	GetHost(uint) (*Host, error)
+	GetFingerprint(uint) (*Fingerprint, error)
+	GetSource(uint) (*Source, error)
+	GetScan(uint) (*Scan, error)
+	GetLabel(uint) (*Label, error)
 
 	// Return a list of hooks
-	FindHooks(uint) []Hook
+	FindHooks(uint) []*Hook
 
-	// Search the cosmos db for some results
-	Search(string) ([]string, error)
+	// Search the cosmos db for some results. Raw queries
+	Search(string) ([]byte, error)
+
+	// Search for hosts with criteria
+	Query(string) ([]*Host, error)
 }
 
 // Adapter to manipulate signatures and modules
