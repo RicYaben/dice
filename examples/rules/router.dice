@@ -1,8 +1,0 @@
-probe webproxy 80
-
-scan tcp synack (probes: webproxy)
-
-rule module "pollipo.py" (sid: pollipo-sig;)
-rule module "mikrotik.py" (sid: mikrotik-sig;)
-rule module "apache.py" (sid: router-sig;)
-rule module "proxy.py" (sid: proxy-sig; rules: mikrotik-sig, apache-sig, pollipo-sig;)
