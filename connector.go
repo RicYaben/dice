@@ -29,6 +29,7 @@ func FromPluginFingerprint(f *shared.Fingerprint) *Fingerprint {
 
 func FromPluginLabel(l *shared.Label) *Label {
 	return &Label{
+		HostID:      l.HostID,
 		ShortName:   l.ShortName,
 		LongName:    l.LongName,
 		Description: l.Description,
@@ -99,6 +100,7 @@ func ToPluginLabel(l *Label) *shared.Label {
 		return nil
 	}
 	return &shared.Label{
+		HostID:      l.HostID,
 		ShortName:   l.ShortName,
 		LongName:    l.LongName,
 		Description: l.Description,

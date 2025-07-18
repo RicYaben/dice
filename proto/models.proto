@@ -26,10 +26,11 @@ message Scan {
 }
 
 message Label {
-  string short_name = 1;
-  string long_name = 2;
-  string description = 3;
-  string mitigation = 4;
+  uint32 host_id = 1;
+  string short_name = 2;
+  string long_name = 3;
+  string description = 4;
+  string mitigation = 5;
 }
 
 message Source {

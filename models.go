@@ -137,7 +137,8 @@ type Scan struct {
 type Label struct {
 	gorm.Model
 
-	ModuleID uint
+	// ID of the host where this label is placed
+	HostID uint
 	// short name of the label, e.g., broken-access-control
 	// This should be unique in the module
 	ShortName string
@@ -149,6 +150,8 @@ type Label struct {
 	Description string
 	// Mitigation advice
 	Mitigation string
+
+	//ModuleID uint
 }
 
 type SourceType string

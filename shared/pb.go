@@ -83,6 +83,7 @@ func ToProtoLabel(l *Label) *pb.Label {
 		return nil
 	}
 	return &pb.Label{
+		HostId:      uint32(l.HostID),
 		ShortName:   l.ShortName,
 		LongName:    l.LongName,
 		Description: l.Description,
@@ -95,6 +96,7 @@ func FromProtoLabel(l *pb.Label) *Label {
 		return nil
 	}
 	return &Label{
+		HostID:      uint(l.HostId),
 		ShortName:   l.ShortName,
 		LongName:    l.LongName,
 		Description: l.Description,

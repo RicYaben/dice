@@ -24,6 +24,7 @@ type Scan struct {
 }
 
 type Label struct {
+	HostID      uint   `json:"host_id"`
 	ShortName   string `json:"short_name"`
 	LongName    string `json:"long_name"`
 	Description string `json:"description"`

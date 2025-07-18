@@ -243,10 +243,11 @@ func (x *Scan) GetArgs() []byte {
 
 type Label struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ShortName     string                 `protobuf:"bytes,1,opt,name=short_name,json=shortName,proto3" json:"short_name,omitempty"`
-	LongName      string                 `protobuf:"bytes,2,opt,name=long_name,json=longName,proto3" json:"long_name,omitempty"`
-	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	Mitigation    string                 `protobuf:"bytes,4,opt,name=mitigation,proto3" json:"mitigation,omitempty"`
+	HostId        uint32                 `protobuf:"varint,1,opt,name=host_id,json=hostId,proto3" json:"host_id,omitempty"`
+	ShortName     string                 `protobuf:"bytes,2,opt,name=short_name,json=shortName,proto3" json:"short_name,omitempty"`
+	LongName      string                 `protobuf:"bytes,3,opt,name=long_name,json=longName,proto3" json:"long_name,omitempty"`
+	Description   string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	Mitigation    string                 `protobuf:"bytes,5,opt,name=mitigation,proto3" json:"mitigation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -279,6 +280,13 @@ func (x *Label) ProtoReflect() protoreflect.Message {
 // Deprecated: Use Label.ProtoReflect.Descriptor instead.
 func (*Label) Descriptor() ([]byte, []int) {
 	return file_proto_models_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *Label) GetHostId() uint32 {
+	if x != nil {
+		return x.HostId
+	}
+	return 0
 }
 
 func (x *Label) GetShortName() string {
@@ -414,14 +422,15 @@ const file_proto_models_proto_rawDesc = "" +
 	"\x04Scan\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x18\n" +
 	"\atargets\x18\x02 \x03(\tR\atargets\x12\x12\n" +
-	"\x04args\x18\x03 \x01(\fR\x04args\"\x85\x01\n" +
-	"\x05Label\x12\x1d\n" +
+	"\x04args\x18\x03 \x01(\fR\x04args\"\x9e\x01\n" +
+	"\x05Label\x12\x17\n" +
+	"\ahost_id\x18\x01 \x01(\rR\x06hostId\x12\x1d\n" +
 	"\n" +
-	"short_name\x18\x01 \x01(\tR\tshortName\x12\x1b\n" +
-	"\tlong_name\x18\x02 \x01(\tR\blongName\x12 \n" +
-	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x1e\n" +
+	"short_name\x18\x02 \x01(\tR\tshortName\x12\x1b\n" +
+	"\tlong_name\x18\x03 \x01(\tR\blongName\x12 \n" +
+	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x1e\n" +
 	"\n" +
-	"mitigation\x18\x04 \x01(\tR\n" +
+	"mitigation\x18\x05 \x01(\tR\n" +
 	"mitigation\"\x8e\x01\n" +
 	"\x06Source\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x1a\n" +

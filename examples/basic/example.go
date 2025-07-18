@@ -8,6 +8,20 @@ import (
 	"github.com/pkg/errors"
 )
 
+var labels = sdk.Labels{
+	"wac": {
+		ShortName:   "weak-access-control",
+		LongName:    "Missing SSH authentication policies",
+		Description: "SSH service allowing anonymous users",
+		Mitigation: `
+		Disable anonoymous authentication methods.
+		In the SSH service config file ('etc/ssh/sshd_config'), set
+		'PermitEmptyPasswords' to 'no', and ensure 'AuthenticationMethods'
+		is not set to 'none'.
+		`,
+	},
+}
+
 func handler(e shared.Event, m *sdk.Module, a shared.Adapter) error {
 	hosts, err := a.Query(fmt.Sprintf("protocol:ssh auth:true host:%d", e.ID()))
 	if err != nil {
@@ -15,7 +29,7 @@ func handler(e shared.Event, m *sdk.Module, a shared.Adapter) error {
 	}
 
 	for _, h := range hosts {
-		a.LabelHost(h.ID, "weak-access-control")
+		a.AddLabel(labels.MakeLabel("wac", h.ID))
 		return m.Propagate()
 	}
 	return nil
@@ -28,16 +42,5 @@ func main() {
 		Help:        "dice -M ssh-brute",
 		Description: "Whether the SSH service has weak auth",
 		Query:       "protocol:ssh",
-		// Requirements: shared.Scan{
-		// 	Module: "scn",
-		// 	Args: sdk.AsJSON(map[string]any{
-		// 		"ports":  22,
-		// 		"probe":  "synack",
-		// 		"module": "ssh-brute",
-		// 		"flags": []string{
-		// 			"dictionary=root:root,admin:admin",
-		// 		},
-		// 	}),
-		// },
 	}, handler)
 }
