@@ -3,13 +3,14 @@
 // They include an event bus to which emitters can listen to.
 package dice
 
+import "github.com/dice/shared"
+
 type Adapters interface {
 	Engine() EngineAdapter
 	Cosmos() CosmosAdapter
 	Composer() ComposerAdapter
 	Signatures() SignatureAdapter
 	Projects() ProjectAdapter
-	Plugins() PluginAdapter
 }
 
 type EngineAdapter interface {
@@ -62,6 +63,10 @@ type CosmosAdapter interface {
 	// Return a list of hooks
 	FindHooks(uint) []*Hook
 
+	// Find source files by their extension by the name of the source
+	// in the current study.
+	FindSources(n []string, ext []string) ([]*Source, error)
+
 	// Search the cosmos db for some results. Raw queries
 	Search(string) ([]byte, error)
 
@@ -77,17 +82,16 @@ type SignatureAdapter interface {
 	Update() error
 
 	// Loads a local signature.
-	AddSignatures(...Signature) error
+	AddSignatures(...*Signature) error
 	// Loads a local module
-	AddModule(Module) error
+	AddModule(*Module) error
 	// Get a registered signature
-	GetSignature(uint) (Signature, error)
+	GetSignature(uint) (*Signature, error)
 	// Get a registered module
-	GetModule(uint) (Module, error)
-}
+	GetModule(uint) (*Module, error)
 
-type PluginAdapter interface {
-	Load(string) (*dicePlugin, error)
+	// Load a module
+	LoadModule(Module) (shared.Module, error)
 }
 
 type ProjectAdapter interface {
@@ -133,13 +137,16 @@ type composerAdapter struct {
 	repo     *signatureRepo
 }
 
-func (a *composerAdapter) GetSignature(id string) (Signature, error) {
+func (a *composerAdapter) GetSignature(id uint) (Signature, error) {
 	return a.repo.getSignature(id)
 }
 
-func (a *composerAdapter) GetModule(id string) (Module, error) {
+func (a *composerAdapter) GetModule(id uint) (Module, error) {
 	return a.repo.getModule(id)
 }
+
+func (a *composerAdapter) GetRoots(id uint) ([]*Node, error)
+func (a *composerAdapter) SearchSignatures(...Signature) []Signature
 
 func (a *composerAdapter) FindSignatures(names []string) ([]Signature, error) {
 	return a.repo.findSignatures(id)
@@ -154,7 +161,7 @@ func (a *composerAdapter) Cosmos(id uint) *cosmosAdapter {
 	return &cosmosAdapter{}
 }
 
-func (a *composerAdapter) withRegistry(r registry) *composerAdapter {
+func (a *composerAdapter) withRegistry(r registry) ComposerAdapter {
 	return &composerAdapter{r, a.repo}
 }
 
@@ -183,28 +190,40 @@ func (a *cosmosAdapter) AddScan(s ...*Scan) error {
 	return a.repo.addScan(s...)
 }
 
-func (a *cosmosAdapter) GetHost(id uint) (Host, error) {
+func (a *cosmosAdapter) GetHost(id uint) (*Host, error) {
 	return a.repo.getHost(id)
 }
 
-func (a *cosmosAdapter) GetFingerprint(id uint) (Fingerprint, error) {
+func (a *cosmosAdapter) GetFingerprint(id uint) (*Fingerprint, error) {
 	return a.repo.getFingerprint(id)
 }
 
-func (a *cosmosAdapter) GetSource(id uint) (Source, error) {
+func (a *cosmosAdapter) GetSource(id uint) (*Source, error) {
 	return a.repo.getSource(id)
 }
 
-func (a *cosmosAdapter) GetLabel(id uint) (Label, error) {
+func (a *cosmosAdapter) GetLabel(id uint) (*Label, error) {
 	return a.repo.getLabel(id)
 }
 
-func (a *cosmosAdapter) GetScan(id uint) (Scan, error) {
+func (a *cosmosAdapter) GetScan(id uint) (*Scan, error) {
 	return a.repo.getScan(id)
 }
 
-func (a *cosmosAdapter) Search(q string) ([]string, error) {
+func (a *cosmosAdapter) FindHooks(id uint) []*Hook {
+	panic("not implemented yet")
+}
+
+func (a *cosmosAdapter) FindSources(n []string, ext []string) ([]*Source, error) {
+	panic("not implemented yet")
+}
+
+func (a *cosmosAdapter) Search(q string) ([]byte, error) {
 	return a.repo.search(q)
+}
+
+func (a *cosmosAdapter) Query(q string) ([]*Host, error) {
+	panic("not implemented yet")
 }
 
 type signatureAdapter struct {
@@ -240,23 +259,31 @@ func MakeAdapters(bus eventBus, home, workspace string) *adapterFactory {
 	}
 }
 
-func (f *adapterFactory) Cosmos() *cosmosAdapter {
+func (f *adapterFactory) Cosmos() CosmosAdapter {
 	return &cosmosAdapter{
 		eventBus: f.eventBus,
 		repo:     f.repos.Cosmos(),
 	}
 }
 
-func (f *adapterFactory) Engine() *engineAdapter {
+func (f *adapterFactory) Engine() EngineAdapter {
 	return &engineAdapter{
 		eventAdapter: eventAdapter{},
 		repo:         f.repos.Sources(),
 	}
 }
 
-func (f *adapterFactory) Composer() *composerAdapter {
+func (f *adapterFactory) Composer() ComposerAdapter {
 	return &composerAdapter{
 		registry: registry{},
 		repo:     f.repos.Signatures(),
 	}
+}
+
+func (f *adapterFactory) Signatures() SignatureAdapter {
+	panic("not implemented yet")
+}
+
+func (f *adapterFactory) Projects() ProjectAdapter {
+	panic("not implemented yet")
 }

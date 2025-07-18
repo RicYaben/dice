@@ -15,9 +15,7 @@ var HandshakeConfig = plugin.HandshakeConfig{
 }
 
 var PluginMap = map[string]plugin.Plugin{
-	"scanner":    &ModulePlugin{},
-	"identifier": &ModulePlugin{},
-	"classifier": &ModulePlugin{},
+	"module": &ModulePlugin{},
 }
 
 // This is how modules will interact with DICE to create
@@ -48,7 +46,7 @@ type Module interface {
 	Propagate() error
 	// Returns an object with the module properties, i.e., name, help
 	// info, description, usage, etc.
-	Properties() (map[string]string, error)
+	Properties() ([]byte, error)
 	// Handle the request
 	Handle(e Event, a Adapter) error
 }

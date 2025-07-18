@@ -29,18 +29,11 @@ type Module struct {
 	Requirements any
 }
 
+// TODO: implement here a simple channel
 func (m *Module) Propagate() error { return nil }
-func (m *Module) Properties() (map[string]string, error) {
-	b, err := json.Marshal(m)
-	if err != nil {
-		return nil, err
-	}
 
-	var p map[string]string
-	if err := json.Unmarshal(b, &p); err != nil {
-		return nil, err
-	}
-	return p, nil
+func (m *Module) Properties() ([]byte, error) {
+	return json.Marshal(m)
 }
 
 type Handler func(e shared.Event, m *Module, a shared.Adapter) error
@@ -92,7 +85,7 @@ func Serve(mod *Module, handler Handler) {
 	plugin.Serve(&plugin.ServeConfig{
 		HandshakeConfig: shared.HandshakeConfig,
 		Plugins: map[string]plugin.Plugin{
-			mod.Type: &shared.ModulePlugin{
+			"module": &shared.ModulePlugin{
 				Impl: &moduleImpl{
 					Module:  mod,
 					handler: handler,

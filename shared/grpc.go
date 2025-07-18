@@ -3,7 +3,6 @@ package shared
 import (
 	"context"
 	// TODO: replace this with "encoding/json/v2" when upgrading to 1.25
-	"encoding/json"
 
 	"github.com/dice/pb"
 	"github.com/hashicorp/go-plugin"
@@ -41,18 +40,12 @@ func (m *GRPCClient) Handle(a Adapter, e Event) error {
 	return err
 }
 
-func (m *GRPCClient) Properties() (map[string]any, error) {
+func (m *GRPCClient) Properties() ([]byte, error) {
 	resp, err := m.client.Properties(context.Background(), &pb.Empty{})
 	if err != nil {
 		return nil, err
 	}
-
-	fields := make(map[string]any)
-	if err := json.Unmarshal(resp.Fields, &fields); err != nil {
-		return nil, err
-	}
-
-	return fields, nil
+	return resp.Fields, nil
 }
 
 // Implementation of the Module server, i.e., the methods the server
@@ -85,12 +78,7 @@ func (m *GRPCModuleServer) Properties(ctx context.Context, req *pb.Empty) (*pb.F
 		return nil, err
 	}
 
-	b, err := json.Marshal(fields)
-	if err != nil {
-		return nil, err
-	}
-
-	return &pb.Fields{Fields: b}, nil
+	return &pb.Fields{Fields: fields}, nil
 }
 
 // Server-side (this happens in the Module), sends plugin calls

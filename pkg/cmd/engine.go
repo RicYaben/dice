@@ -58,25 +58,26 @@ func newLazyEngineLoader(conf dice.Configuration) *lazyLoader {
 
 func (l *lazyLoader) preRunE(w WorkspaceFlags, e EngineFlags, c ComposerFlags) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
-		wk := __(w.Project, w.Study)
+		// TODO: not sure how to implement this
+		wk := dice.MakeWorkspace(w.Project, w.Study)
 
 		em := dice.NewEmitter()
 		ad := dice.MakeAdapters(em.Emit, l.conf.Paths.STATE_HOME, wk)
 		comp := dice.NewComposer(ad.Composer())
 
-		if err := comp.Stage("modules", c.Modules); err != nil {
-			return errors.Wrap(err, "failed to load modules")
+		if err := comp.Stage(dice.STAGE_MODULE, c.Modules...); err != nil {
+			return errors.Wrap(err, "failed to stage modules")
 		}
 
-		if err := comp.Stage("signatures", c.Signatures); err != nil {
-			return errors.Wrap(err, "failed to load signatures")
+		if err := comp.Stage(dice.STAGE_SIGNATURE, c.Signatures...); err != nil {
+			return errors.Wrap(err, "failed to stage signatures")
 		}
 
 		components, err := comp.Compose(e.toList())
 		if err != nil {
 			return errors.Wrap(err, "failed to create components")
 		}
-		em.subscribe(components...)
+		em.Subscribe(components...)
 
 		l.adapters = ad
 		l.composer = comp
@@ -90,8 +91,9 @@ func (l *lazyLoader) runE(i InputFlags) func(cmd *cobra.Command, args []string) 
 		ad := l.adapters.Engine()
 		engine := dice.NewEngine(ad, l.emitter)
 
-		s := l.adapters.Sources()
-		srcs, err := s.GetSources(i.Sources, []string{"*.json", "*.csv", "*.txt"})
+		s := l.adapters.Cosmos()
+		// find file sources
+		srcs, err := s.FindSources(i.Sources, []string{"*.json", "*.csv", "*.txt"})
 		if err != nil {
 			return errors.Wrap(err, "failed to find sources")
 		}

@@ -63,17 +63,13 @@ type Module struct {
 
 	// Name of the module
 	Name string
-	// Classifier, identifier, scanner
-	Type string
 	// Path to module
 	Location string
 	// Hash of the plugin
 	Hash string
 	// Tags
-	Tags []string
-
-	// Other modules this one requires
-	Requires []Module
+	Tags       []string
+	Properties datatypes.JSON
 }
 
 // A target-ish. It holds fingerprints and labels

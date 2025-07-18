@@ -6,6 +6,18 @@ import (
 	"github.com/pkg/errors"
 )
 
+type StageType string
+
+const (
+	STAGE_MODULE    = "module"
+	STAGE_SIGNATURE = "signature"
+)
+
+type Composer interface {
+	// Preload signatures or modules
+	Stage(t StageType, name ...string) error
+}
+
 // A simple registry that holds staged signatures
 type registry struct {
 	signatures map[uint]Signature
@@ -40,17 +52,17 @@ func NewComposer(adapter ComposerAdapter) *composer {
 
 // Preload signatures and modules. This is meant to find
 // signatures and register them into a common registry.
-func (c *composer) Stage(t string, names []string) error {
+func (c *composer) Stage(t StageType, name ...string) error {
 	switch t {
-	case "signatures":
-		sigs, err := c.adapter.FindSignatures(names)
+	case STAGE_SIGNATURE:
+		sigs, err := c.adapter.FindSignatures(name)
 		if err != nil {
 			return errors.Wrap(err, "failed to find signatures")
 		}
 		c.registry.addSignature(sigs...)
 		return nil
-	case "modules":
-		mods, err := c.adapter.FindModules(names)
+	case STAGE_MODULE:
+		mods, err := c.adapter.FindModules(name)
 		if err != nil {
 			return errors.Wrap(err, "failed to find modules")
 		}

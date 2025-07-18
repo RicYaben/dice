@@ -59,6 +59,10 @@ func NewGraphNode(id uint, m Module) *graphNode {
 }
 
 func (n *graphNode) Update(e Event) error {
+	// TODO: this should be some sort of closure.
+	// When calling "handle", we should add some kind of closure
+	// that calls handle on a goroutine, waits for error, and handles the propagation
+	// if there is any
 	ev := shared.NewEvent(string(e.Type), e.ID)
 	return n.module.Handle(ev, n.connector)
 }

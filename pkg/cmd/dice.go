@@ -6,6 +6,8 @@ import (
 	"github.com/spf13/pflag"
 )
 
+const unset = "-"
+
 type Flags struct {
 	Paths dice.StandardPaths
 	//Config dice.ConfigFlags
@@ -34,10 +36,10 @@ func Run() error {
 
 	stdpaths := &f.Paths
 	pathFlags := pflag.NewFlagSet("Standard Paths", pflag.ExitOnError)
-	pathFlags.StringVar(&stdpaths.DICE_APPNAME, "stdpath.app", dice.UnsetFlag, "App name")
-	pathFlags.StringVar(&stdpaths.CONFIG_HOME, "stdpath.config", dice.UnsetFlag, "Configuration directory")
-	pathFlags.StringVar(&stdpaths.STATE_HOME, "stdpath.state", dice.UnsetFlag, "State directory")
-	pathFlags.StringVar(&stdpaths.DATA_HOME, "stdpath.data", dice.UnsetFlag, "Data directory")
+	pathFlags.StringVar(&stdpaths.DICE_APPNAME, "stdpath.app", unset, "App name")
+	pathFlags.StringVar(&stdpaths.CONFIG_HOME, "stdpath.config", unset, "Configuration directory")
+	pathFlags.StringVar(&stdpaths.STATE_HOME, "stdpath.state", unset, "State directory")
+	pathFlags.StringVar(&stdpaths.DATA_HOME, "stdpath.data", unset, "Data directory")
 	fl.AddFlagSet(pathFlags)
 
 	// Config flags -- not used atm

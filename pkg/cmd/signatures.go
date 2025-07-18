@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/dice"
@@ -82,12 +83,12 @@ func signatureCommands(conf dice.Configuration) *cobra.Command {
 		query = append([]any{"name LIKE ?"}, query...)
 
 		sAdapter := oc.adapters.Signatures()
-		locs, err := sAdapter.Locate(&dice.Module{}, query)
+		locs, err := sAdapter.Locate(dice.Signature{}, query)
 		if err != nil {
 			return err
 		}
 
-		var psigs []dice.Signature
+		var psigs []*dice.Signature
 		parser := dice.NewParser()
 		for _, loc := range locs {
 			if loc.ObjectID > -1 {
@@ -103,7 +104,7 @@ func signatureCommands(conf dice.Configuration) *cobra.Command {
 			if err != nil {
 				return errors.Wrapf(err, "failed to parse signature %s", loc.Name)
 			}
-			psigs = append(psigs, psig)
+			psigs = append(psigs, &psig)
 		}
 
 		// This is weird, because some signatures may be referencing others
@@ -126,6 +127,7 @@ func signatureCommands(conf dice.Configuration) *cobra.Command {
 func moduleCommands(conf dice.Configuration) *cobra.Command {
 	o := &operatorCmds{name: "module", conf: conf}
 
+	// register one or more modules into the database (by globs)
 	o.add = func(oc *operatorCmds, args []string) error {
 		var query []any
 		for _, name := range args {
@@ -134,28 +136,35 @@ func moduleCommands(conf dice.Configuration) *cobra.Command {
 		}
 		query = append([]any{"name LIKE ?"}, query...)
 
-		sAdpater := oc.adapters.Signatures()
-		locs, err := sAdpater.Locate(&dice.Module{}, query)
+		sAdapter := oc.adapters.Signatures()
+
+		// Locate modules
+		locs, err := sAdapter.Locate(dice.Module{}, query)
 		if err != nil {
 			return err
 		}
 
-		// A plugin pAdapter. It can start a plugin, extract
-		// metadata, etc.
-		pAdapter := o.adapters.Plugins()
 		for _, loc := range locs {
 			if loc.ObjectID > -1 {
 				continue
 			}
 
+			mod := dice.Module{}
+
 			// get the module metadata. i.e., name, type, requirements,
 			// query, maintainer, version, help, description, etc.
-			p, err := pAdapter.Load(loc.Location)
+			m, err := sAdapter.LoadModule(mod)
 			if err != nil {
 				return err
 			}
 
-			if err := sAdpater.AddModule(p.Metadata()); err != nil {
+			props, err := m.Properties()
+			if err != nil {
+				return err
+			}
+			mod.Properties = props
+
+			if err := sAdapter.AddModule(&mod); err != nil {
 				return err
 			}
 		}
@@ -170,7 +179,11 @@ func moduleCommands(conf dice.Configuration) *cobra.Command {
 	return o.makeCommand()
 }
 
-func listHandler[M dice.Signature | dice.Module](model *M) func(oc *operatorCmds, args []string) error {
+type NamedImpl interface {
+	dice.Signature | dice.Module
+}
+
+func listHandler[M NamedImpl](model *M) func(oc *operatorCmds, args []string) error {
 	return func(oc *operatorCmds, args []string) error {
 		var query []any
 		for _, name := range args {
@@ -187,13 +200,17 @@ func listHandler[M dice.Signature | dice.Module](model *M) func(oc *operatorCmds
 
 		fmt.Printf("%-5s | %-20s\n", "ID", "Name")
 		for _, m := range ms {
-			fmt.Printf("%-5d | %-20s\n", m.ID, m.Name)
+			// I really do not want to add these methods to the structs
+			v := reflect.ValueOf(m)
+			id := v.FieldByName("ID").Uint()
+			name := v.FieldByName("Name").String()
+			fmt.Printf("%-5d | %-20s\n", id, name)
 		}
 		return nil
 	}
 }
 
-func deleteHandler[M dice.Signature | dice.Module](model *M) func(oc *operatorCmds, args []string) error {
+func deleteHandler[M NamedImpl](model *M) func(oc *operatorCmds, args []string) error {
 	return func(oc *operatorCmds, args []string) error {
 		var query []any
 		for _, name := range args {

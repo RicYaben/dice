@@ -49,7 +49,7 @@ func LoadModule(m Module) (shared.Module, error) {
 		return nil, errors.Wrapf(err, "failed to load module %s", m.Name)
 	}
 
-	raw, err := rpcClient.Dispense(m.Type)
+	raw, err := rpcClient.Dispense("module")
 	if err != nil {
 		return nil, err
 	}
