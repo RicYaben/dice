@@ -17,26 +17,26 @@ type EngineAdapter interface {
 	// Add a source
 	AddSource(...*Source) error
 	// Find sources in the current study
-	FindSources([]string) ([]Source, error)
+	FindSources([]string, []string) ([]*Source, error)
 }
 
 type ComposerAdapter interface {
 	// Get a registered signature
-	GetSignature(uint) (Signature, error)
+	GetSignature(uint) (*Signature, error)
 	// Get a registered module
-	GetModule(uint) (Module, error)
+	GetModule(uint) (*Module, error)
 	// Get the roots of a registered signature
 	GetRoots(uint) ([]*Node, error)
 
 	// TODO: may need a query to search for required signatures
 	// recursively.
 	// Raw query for signatures
-	SearchSignatures(...Signature) []Signature
+	Find(any, any) error
 
 	// Find signatures in the home directory
-	FindSignatures([]string) ([]Signature, error)
+	FindSignatures([]string) ([]*Signature, error)
 	// Find in the home directory
-	FindModules([]string) ([]Module, error)
+	FindModules([]string) ([]*Module, error)
 
 	// make a copy with a registry
 	withRegistry(registry) ComposerAdapter
@@ -125,11 +125,21 @@ type engineAdapter struct {
 }
 
 func (a *engineAdapter) AddSource(s ...*Source) error {
-	return a.repo.addSource(s...)
+	if err := a.repo.addSource(s...); err != nil {
+		return err
+	}
+
+	for _, so := range s {
+		if err := a.makeEvent(SOURCE_EVENT, so.ID); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
-func (a *engineAdapter) FindSources(s []string) ([]Source, error) {
-	return a.repo.findSources(s...)
+func (a *engineAdapter) FindSources(s, ext []string) ([]*Source, error) {
+	return a.repo.findSourceFiles(s, ext)
 }
 
 type composerAdapter struct {
@@ -137,23 +147,37 @@ type composerAdapter struct {
 	repo     *signatureRepo
 }
 
-func (a *composerAdapter) GetSignature(id uint) (Signature, error) {
-	return a.repo.getSignature(id)
+func (a *composerAdapter) GetSignature(id uint) (*Signature, error) {
+	if sig, ok := a.registry.signatures[id]; ok {
+		return sig, nil
+	}
+
+	sig, err := a.repo.getSignature(id)
+	if err != nil {
+		return nil, err
+	}
+	a.registry.signatures[sig.ID] = sig
+	return sig, nil
 }
 
-func (a *composerAdapter) GetModule(id uint) (Module, error) {
+func (a *composerAdapter) GetModule(id uint) (*Module, error) {
 	return a.repo.getModule(id)
 }
 
-func (a *composerAdapter) GetRoots(id uint) ([]*Node, error)
-func (a *composerAdapter) SearchSignatures(...Signature) []Signature
-
-func (a *composerAdapter) FindSignatures(names []string) ([]Signature, error) {
-	return a.repo.findSignatures(id)
+func (a *composerAdapter) GetRoots(id uint) ([]*Node, error) {
+	return a.repo.getRoots(id)
 }
 
-func (a *composerAdapter) FindModules(names []string) ([]Module, error) {
-	return a.repo.findModules(id)
+func (a *composerAdapter) Find(m any, q any) error {
+	return a.repo.find(m, q)
+}
+
+func (a *composerAdapter) FindSignatures(globs []string) ([]*Signature, error) {
+	return a.repo.findSignatureFiles(globs)
+}
+
+func (a *composerAdapter) FindModules(globs []string) ([]*Module, error) {
+	return a.repo.findModuleFiles(globs)
 }
 
 // TODO: dont know how to finish this

@@ -42,8 +42,8 @@ func (p *parser) Parse(fname string, r io.Reader) (Signature, error) {
 func (p *parser) bind(fname string, s *ast.Signature) (Signature, error) {
 	sig := Signature{
 		// default to classifier
-		Type: "classifier",
-		Name: fname,
+		Component: "classifier",
+		Name:      fname,
 	}
 
 	// get the type of the signature. ignore the rest
@@ -51,7 +51,7 @@ func (p *parser) bind(fname string, s *ast.Signature) (Signature, error) {
 		switch prop.Key {
 		case "type":
 			if v, ok := prop.Value.(ast.String); ok {
-				sig.Type = v.String
+				sig.Component = v.String
 			}
 		}
 	}

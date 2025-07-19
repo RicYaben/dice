@@ -10,8 +10,8 @@ type Signature struct {
 
 	// Name of the signature
 	Name string `gorm:"uniqueIndex"`
-	// Type of signature. This defines the modules it contains
-	Type string
+	// Component of signature. This defines the modules it contains
+	Component string
 	// Linked nodes in the signature
 	Nodes []*Node `gorm:"foreignKey:SignatureID;constraint:OnDelete:CASCADE"`
 }

@@ -1,10 +1,16 @@
 package dice
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -28,8 +34,6 @@ type Repository interface {
 }
 
 type repository struct {
-	Repository
-
 	db *gorm.DB
 
 	location string
@@ -69,12 +73,10 @@ func (r *repository) connect() (*gorm.DB, error) {
 
 type sourceRepo struct {
 	Repository
-
-	currProject Project
-	currScan    string
+	conf *Configuration
 }
 
-func (r *sourceRepo) addSource(s *Source) error {
+func (r *sourceRepo) addSource(s ...*Source) error {
 	return r.WithTransaction(func(conn *gorm.DB) error {
 		sourceQ := conn.Create(s)
 		if err := sourceQ.Error; err != nil {
@@ -85,35 +87,24 @@ func (r *sourceRepo) addSource(s *Source) error {
 }
 
 func (r *sourceRepo) getSources(u ...uint) ([]*Source, error) {
-	panic("not implemented yet")
+	var sources []*Source
+	err := r.WithTransaction(func(d *gorm.DB) error {
+		q := d.Find(sources, u)
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to find sources")
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return sources, err
 }
 
-// func (e *engine) findSources(scan string, names, globs []string) ([]*SourceModel, error) {
-// 	var srcs []*SourceModel
-
-// 	// Location of the scan
-// 	for _, name := range names {
-// 		// Scan source location
-// 		sr, err := e.conn.sources.find(scan, name, globs)
-// 		if err != nil {
-// 			return nil, errors.Wrap(err, "failed to locate source")
-// 		}
-// 		srcs = append(srcs, sr...)
-// 	}
-// 	return srcs, nil
-// }
-
 // Locates source files inside a scan by the name of the source
-func (r *sourceRepo) findSourceFiles(spath, sname string, globs []string) ([]*Source, error) {
-	fpath := filepath.Join(spath, sname)
-	info, err := os.Stat(spath)
-	if os.IsNotExist(err) {
-		return nil, errors.Wrap(err, "source not found")
-	}
-
-	if !info.IsDir() {
-		return nil, errors.Wrap(err, "source path not a directory")
-	}
+func (r *sourceRepo) findSourceFiles(globs, ext []string) ([]*Source, error) {
+	// current workspace
+	fpath := r.conf.Workspace()
 
 	var srcs []*Source
 	// globs are just fine. It takes some time to iterate through all the
@@ -126,16 +117,21 @@ func (r *sourceRepo) findSourceFiles(spath, sname string, globs []string) ([]*So
 
 		var gSrcs []*Source
 		for _, match := range matches {
-			_, err := os.Stat(match)
+			info, err := os.Stat(match)
 			if err != nil || info.IsDir() {
 				continue // we cannot stat this, or is a dir
 			}
 
+			format := filepath.Ext(match)
+			if !slices.Contains(ext, format) {
+				continue
+			}
+
 			gSrcs = append(gSrcs, &Source{
-				Name:     sname,
+				Name:     info.Name(),
 				Location: match,
 				Type:     SourceFile,
-				Format:   filepath.Ext(match),
+				Format:   format,
 			})
 		}
 		return gSrcs, nil
@@ -158,39 +154,94 @@ type cosmosRepo struct {
 
 // returns a host by id
 func (r *cosmosRepo) getHost(id uint) (*Host, error) {
-	panic("not implemented yet")
+	var h *Host
+	return h, r.WithTransaction(func(d *gorm.DB) error {
+		q := d.First(h, id)
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to find host")
+		}
+		return nil
+	})
 }
 
 func (r *cosmosRepo) getHosts(id ...uint) ([]*Host, error) {
-	panic("not implemented yet")
+	var h []*Host
+	return h, r.WithTransaction(func(d *gorm.DB) error {
+		q := d.Find(h, id)
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to find hosts")
+		}
+		return nil
+	})
 }
 
 func (r *cosmosRepo) getLabels(id ...uint) ([]*Label, error) {
-	panic("not implemented yet")
+	var l []*Label
+	return l, r.WithTransaction(func(d *gorm.DB) error {
+		q := d.Find(l, id)
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to find labels")
+		}
+		return nil
+	})
 }
 
 func (r *cosmosRepo) getFingerprints(id ...uint) ([]*Fingerprint, error) {
-	panic("not implemented yet")
+	var res []*Fingerprint
+	return res, r.WithTransaction(func(d *gorm.DB) error {
+		q := d.Find(res, id)
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to find fingerprints")
+		}
+		return nil
+	})
 }
 
 func (r *cosmosRepo) addHost(h *Host) error {
-	panic("not implemented yet")
+	return r.WithTransaction(func(d *gorm.DB) error {
+		q := d.Clauses(clause.OnConflict{
+			DoNothing: true,
+		}).Create(h)
+
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to create host")
+		}
+		return nil
+	})
 }
 
 func (r *cosmosRepo) addFingerprint(f *Fingerprint) error {
-	panic("not implemented yet")
+	return r.WithTransaction(func(d *gorm.DB) error {
+		q := d.Create(f)
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to create fingerprint")
+		}
+		return nil
+	})
 }
 
 func (r *cosmosRepo) addLabel(l *Label) error {
-	panic("not implemented yet")
+	return r.WithTransaction(func(d *gorm.DB) error {
+		q := d.Create(l)
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to create label")
+		}
+		return nil
+	})
 }
 
 type eventRepo struct {
 	Repository
 }
 
-func (r *eventRepo) addEvent(event Event) error {
-	panic("not implemented yet")
+func (r *eventRepo) addEvent(e Event) error {
+	return r.WithTransaction(func(d *gorm.DB) error {
+		q := d.Create(e)
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to create event")
+		}
+		return nil
+	})
 }
 
 func (r *eventRepo) getEvents(u ...uint) ([]*Event, error) {
@@ -199,21 +250,65 @@ func (r *eventRepo) getEvents(u ...uint) ([]*Event, error) {
 
 type signatureRepo struct {
 	Repository
+	conf *Configuration
 }
 
-func (r *signatureRepo) addSignature(sig *Signature) error {
-	panic("not implemented yet")
+func (r *signatureRepo) addSignature(s *Signature) error {
+	return r.WithTransaction(func(d *gorm.DB) error {
+		q := d.Clauses(clause.OnConflict{
+			DoNothing: true,
+		}).Create(s)
+
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to create signature")
+		}
+		return nil
+	})
 }
 
-func (r *signatureRepo) getSignatures(u ...uint) (*Signature, error) {
-	panic("not implemented yet")
+func (r *signatureRepo) getSignature(u uint) (*Signature, error) {
+	var res *Signature
+	return res, r.WithTransaction(func(d *gorm.DB) error {
+		q := d.First(res, u)
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to find fingerprint")
+		}
+		return nil
+	})
+}
+
+func (r *signatureRepo) getModule(u uint) (*Module, error) {
+	var res *Module
+	return res, r.WithTransaction(func(d *gorm.DB) error {
+		q := d.First(res, u)
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to find module")
+		}
+		return nil
+	})
+}
+
+func (r *signatureRepo) getSignatures(u ...uint) ([]*Signature, error) {
+	var res []*Signature
+	return res, r.WithTransaction(func(d *gorm.DB) error {
+		q := d.Find(res, u)
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to find fingerprints")
+		}
+		return nil
+	})
 }
 
 func (r *signatureRepo) removeSignatures(u ...uint) error {
-	panic("not implemented yet")
+	return r.WithTransaction(func(d *gorm.DB) error {
+		q := d.Delete([]*Signature{}, u)
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to remove fingerprints")
+		}
+		return nil
+	})
 }
 
-// TODO: remove - just remove the db
 func (r *signatureRepo) deleteSignatures() error {
 	return r.WithTransaction(func(conn *gorm.DB) error {
 		q := conn.Session(&gorm.Session{AllowGlobalUpdate: true})
@@ -224,51 +319,164 @@ func (r *signatureRepo) deleteSignatures() error {
 	})
 }
 
-// TODO: remove
-func (r *signatureRepo) getSignature(name string) (*Signature, error) {
-	panic("not implemented yet")
+func (r *signatureRepo) saveSignatures(signatures []*Signature) error {
+	return r.WithTransaction(func(d *gorm.DB) error {
+		if len(signatures) == 0 {
+			// no signatures to store
+			return nil
+		}
+
+		q := d.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "name"}},
+			UpdateAll: true,
+		}).
+			Omit("Scans.Probes", "Scans.Rules", "Rules.Track").
+			Create(signatures)
+
+		if err := q.Error; err != nil {
+			return fmt.Errorf("failed to create signatures: %w", err)
+		}
+
+		if err := d.Save(signatures).Error; err != nil {
+			return fmt.Errorf("failed to save signatures: %w", err)
+		}
+		return nil
+
+	})
 }
 
-// TODO: remove
-func (r *signatureRepo) findSignatures(names []string) ([]string, error) {
-	var found []string
+func (r *signatureRepo) getRoots(id uint) ([]*Node, error) {
+	var roots []*Node
+	return roots, r.WithTransaction(func(conn *gorm.DB) error {
+		q := conn.Raw(`
+			SELECT *
+			FROM nodes AS n
+			WHERE n.signature_id = ?
+			AND NOT EXISTS (
+				SELECT 1
+				FROM node_children AS nc
+				JOIN nodes AS parent ON nc.node_id = parent.id
+				WHERE nc.child_id = n.id
+				AND parent.signature_id = n.signature_id
+			)
+		`, id).Scan(&roots)
 
-	return found, r.WithTransaction(func(conn *gorm.DB) error {
-		q := conn.Model(&Signature{}).Where("name IN ?", names).Pluck("name", &found)
 		if err := q.Error; err != nil {
-			return errors.Wrap(err, "failed to find signatures")
+			return errors.Wrap(err, "failed to find signature roots")
 		}
 		return nil
 	})
 }
 
-// TODO: remove
-func (r *signatureRepo) saveSignatures(signatures []*Signature) error {
-	if len(signatures) == 0 {
-		// no signatures to store
+func (r *signatureRepo) find(m any, q any) error {
+	return r.WithTransaction(func(d *gorm.DB) error {
+		res := d.Where(m).Find(q)
+		if err := res.Error; err != nil {
+			return err
+		}
 		return nil
+	})
+}
+
+func (r *signatureRepo) findSignatureFiles(globs []string) ([]*Signature, error) {
+	fpath := r.conf.Signatures()
+	parser := NewParser()
+
+	var sigs []*Signature
+	withGlob := func(glob string) ([]*Signature, error) {
+		// Signatures have the ".dice" extension
+		if !strings.HasSuffix(glob, ".dice") {
+			glob += ".dice"
+		}
+
+		matches, err := filepath.Glob(filepath.Join(fpath, glob))
+		if err != nil {
+			return nil, errors.Wrap(err, "invalid glob pattern")
+		}
+
+		var gSigs []*Signature
+		for _, match := range matches {
+			info, err := os.Stat(match)
+			if err != nil || info.IsDir() {
+				continue // we cannot stat this, or is a dir
+			}
+
+			// TODO: defer is too far into the loop, convert this into
+			// a function, and close the file as soon as we parse the signature
+			r, err := os.Open(match)
+			if err != nil {
+				return nil, err
+			}
+			defer r.Close()
+
+			sig, err := parser.Parse(info.Name(), r)
+			if err != nil {
+				return nil, err
+			}
+
+			gSigs = append(gSigs, &sig)
+		}
+		return gSigs, nil
 	}
 
-	conn, err := r.connect()
-	if err != nil {
-		return err
+	for _, glob := range globs {
+		globSigs, err := withGlob(glob)
+		if err != nil {
+			return nil, err
+		}
+		sigs = append(sigs, globSigs...)
+	}
+	return sigs, nil
+}
+
+func (r *signatureRepo) findModuleFiles(globs []string) ([]*Module, error) {
+	fpath := r.conf.Modules()
+
+	var mods []*Module
+	withGlob := func(glob string) ([]*Module, error) {
+		matches, err := filepath.Glob(filepath.Join(fpath, glob))
+		if err != nil {
+			return nil, errors.Wrap(err, "invalid glob pattern")
+		}
+
+		var gMods []*Module
+		for _, match := range matches {
+			info, err := os.Stat(match)
+			if err != nil || info.IsDir() {
+				continue // we cannot stat this, or is a dir
+			}
+
+			// TODO: same as above, close the file earlier
+			f, err := os.Open(match)
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer f.Close()
+
+			h := md5.New()
+			if _, err := io.Copy(h, f); err != nil {
+				return nil, err
+			}
+
+			mod := &Module{
+				Name:     strings.TrimSuffix(info.Name(), filepath.Ext(match)),
+				Location: match,
+				Hash:     hex.EncodeToString(h.Sum(nil)),
+			}
+			gMods = append(gMods, mod)
+		}
+		return gMods, nil
 	}
 
-	q := conn.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "name"}},
-		UpdateAll: true,
-	}).
-		Omit("Scans.Probes", "Scans.Rules", "Rules.Track").
-		Create(signatures)
-
-	if err := q.Error; err != nil {
-		return fmt.Errorf("failed to create signatures: %w", err)
+	for _, glob := range globs {
+		gMods, err := withGlob(glob)
+		if err != nil {
+			return nil, err
+		}
+		mods = append(mods, gMods...)
 	}
 
-	if err := conn.Save(signatures).Error; err != nil {
-		return fmt.Errorf("failed to save signatures: %w", err)
-	}
-	return nil
+	return mods, nil
 }
 
 type projectRepo struct {
@@ -360,6 +568,7 @@ func (b *repositoryBuilder) build() *repository {
 }
 
 type repositoryRegistry struct {
+	conf    *Configuration
 	builder *repositoryBuilder
 
 	signatures *signatureRepo
@@ -369,9 +578,10 @@ type repositoryRegistry struct {
 	sources    *sourceRepo
 }
 
-func newRepositoryFactory(home, workspace string) *repositoryRegistry {
+func newRepositoryFactory(conf *Configuration) *repositoryRegistry {
 	return &repositoryRegistry{
-		builder: newRepositoryBuilder(home, workspace),
+		conf:    conf,
+		builder: newRepositoryBuilder(conf.Home(), conf.Workspace()),
 	}
 }
 
@@ -382,7 +592,10 @@ func (r *repositoryRegistry) Signatures() *signatureRepo {
 
 	models := []any{&Signature{}, &Module{}, &Node{}}
 	repo := r.builder.setModels(models).setName("signatures.db").build()
-	r.signatures = &signatureRepo{repo}
+	r.signatures = &signatureRepo{
+		repo,
+		r.conf,
+	}
 	return r.signatures
 }
 

@@ -93,7 +93,7 @@ func (l *lazyLoader) runE(i InputFlags) func(cmd *cobra.Command, args []string) 
 
 		s := l.adapters.Cosmos()
 		// find file sources
-		srcs, err := s.FindSources(i.Sources, []string{"*.json", "*.csv", "*.txt"})
+		srcs, err := s.FindSources(i.Sources, []string{"json", "csv", "txt"})
 		if err != nil {
 			return errors.Wrap(err, "failed to find sources")
 		}

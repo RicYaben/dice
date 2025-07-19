@@ -28,7 +28,7 @@ type GraphNode interface {
 // Implementation of Graph
 type graph struct {
 	// Original signature
-	signature Signature
+	signature *Signature
 	// Root nodes of the graph
 	nodes []GraphNode
 	// Nodes without children
@@ -47,14 +47,14 @@ func (g *graph) Update(e Event) error {
 
 type graphNode struct {
 	ID     uint
-	Module Module
+	Module *Module
 
 	children  []GraphNode
 	connector *Connector
 	module    shared.Module
 }
 
-func NewGraphNode(id uint, m Module) *graphNode {
+func NewGraphNode(id uint, m *Module) *graphNode {
 	panic("not implemented yet")
 }
 
@@ -132,7 +132,7 @@ func newGraphRegistry(ad ComposerAdapter) *graphRegistry {
 	}
 }
 
-func (r *graphRegistry) entrypoints(sigs []Signature) ([]GraphNode, error) {
+func (r *graphRegistry) entrypoints(sigs []*Signature) ([]GraphNode, error) {
 	nodes := make([]GraphNode, 0, len(sigs))
 	graphs, err := r.makeGraphs(sigs)
 	if err != nil {
@@ -150,7 +150,7 @@ func (r *graphRegistry) entrypoints(sigs []Signature) ([]GraphNode, error) {
 	return nodes, nil
 }
 
-func (r *graphRegistry) makeGraphs(sigs []Signature) ([]*graph, error) {
+func (r *graphRegistry) makeGraphs(sigs []*Signature) ([]*graph, error) {
 	var graphs []*graph
 	for _, sig := range sigs {
 		g, err := r.makeGrpah(sig)
@@ -162,7 +162,7 @@ func (r *graphRegistry) makeGraphs(sigs []Signature) ([]*graph, error) {
 	return graphs, nil
 }
 
-func (r *graphRegistry) makeGrpah(sig Signature) (*graph, error) {
+func (r *graphRegistry) makeGrpah(sig *Signature) (*graph, error) {
 	// check if we are still loading the signature, i.e., on the path,
 	// but not yet registered
 	if _, ok := r.loadingSigs[sig.ID]; ok {

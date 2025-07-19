@@ -20,10 +20,10 @@ type Composer interface {
 
 // A simple registry that holds staged signatures
 type registry struct {
-	signatures map[uint]Signature
+	signatures map[uint]*Signature
 }
 
-func (r *registry) addSignature(s ...Signature) {
+func (r *registry) addSignature(s ...*Signature) {
 	for _, sig := range s {
 		if _, ok := r.signatures[sig.ID]; !ok {
 			r.signatures[sig.ID] = sig
@@ -31,11 +31,11 @@ func (r *registry) addSignature(s ...Signature) {
 	}
 }
 
-func (r *registry) getOrCreateSignature(id uint) Signature {
+func (r *registry) getOrCreateSignature(id uint) *Signature {
 	if sig, ok := r.signatures[id]; ok {
 		return sig
 	}
-	sig := Signature{Name: "-"}
+	sig := &Signature{Name: "-"}
 	sig.ID = id
 	r.signatures[id] = sig
 	return sig
@@ -123,7 +123,11 @@ func (f *componentFactory) makeComponent(n string) (comp *Component, err error) 
 }
 
 func (f *componentFactory) makeIdentifier() (*Component, error) {
-	sigs := f.compAdapter.SearchSignatures(Signature{Type: "identfier"})
+	var sigs []*Signature
+	if err := f.compAdapter.Find(sigs, &Signature{Component: "identfier"}); err != nil {
+		return nil, err
+	}
+
 	eps, err := f.reg.entrypoints(sigs)
 	if err != nil {
 		return nil, err
@@ -138,7 +142,11 @@ func (f *componentFactory) makeIdentifier() (*Component, error) {
 }
 
 func (f *componentFactory) makeClassifier() (*Component, error) {
-	sigs := f.compAdapter.SearchSignatures(Signature{Type: "classifier"})
+	var sigs []*Signature
+	if err := f.compAdapter.Find(sigs, &Signature{Component: "classifier"}); err != nil {
+		return nil, err
+	}
+
 	eps, err := f.reg.entrypoints(sigs)
 	if err != nil {
 		return nil, err
@@ -153,7 +161,11 @@ func (f *componentFactory) makeClassifier() (*Component, error) {
 }
 
 func (f *componentFactory) makeScanner() (*Component, error) {
-	sigs := f.compAdapter.SearchSignatures(Signature{Type: "scanner"})
+	var sigs []*Signature
+	if err := f.compAdapter.Find(sigs, &Signature{Component: "scanner"}); err != nil {
+		return nil, err
+	}
+
 	eps, err := f.reg.entrypoints(sigs)
 	if err != nil {
 		return nil, err

@@ -127,6 +127,22 @@ type Configuration struct {
 	//log     LogsFlags
 }
 
+func (c *Configuration) Home() string {
+	panic("not implemented yet")
+}
+
+func (c *Configuration) Workspace() string {
+	panic("not implemented yet")
+}
+
+func (c *Configuration) Signatures() string {
+	panic("not implemented yet")
+}
+
+func (c *Configuration) Modules() string {
+	panic("not implemented yet")
+}
+
 // Configuration without profile.
 // Everything is searched for and loaded from the current directory
 func baseConfig() Configuration {
