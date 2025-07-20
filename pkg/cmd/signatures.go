@@ -59,7 +59,7 @@ func (o *operatorCmds) makeCommand() *cobra.Command {
 		GroupID: o.name,
 		Use:     o.name,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			o.adapters = dice.MakeAdapters(nil, o.conf.Paths.STATE_HOME, ".")
+			o.adapters = dice.MakeAdapters(nil, &o.conf)
 		},
 	}
 

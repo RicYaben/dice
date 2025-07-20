@@ -164,6 +164,39 @@ func (r *cosmosRepo) getHost(id uint) (*Host, error) {
 	})
 }
 
+func (r *cosmosRepo) getFingerprint(id uint) (*Fingerprint, error) {
+	var fp *Fingerprint
+	return fp, r.WithTransaction(func(d *gorm.DB) error {
+		q := d.First(fp, id)
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to find fingerprint")
+		}
+		return nil
+	})
+}
+
+func (r *cosmosRepo) getLabel(id uint) (*Label, error) {
+	var lab *Label
+	return lab, r.WithTransaction(func(d *gorm.DB) error {
+		q := d.First(lab, id)
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to find label")
+		}
+		return nil
+	})
+}
+
+func (r *cosmosRepo) getScan(id uint) (*Scan, error) {
+	var sc *Scan
+	return sc, r.WithTransaction(func(d *gorm.DB) error {
+		q := d.First(sc, id)
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to find scan")
+		}
+		return nil
+	})
+}
+
 func (r *cosmosRepo) getHosts(id ...uint) ([]*Host, error) {
 	var h []*Host
 	return h, r.WithTransaction(func(d *gorm.DB) error {
@@ -197,7 +230,7 @@ func (r *cosmosRepo) getFingerprints(id ...uint) ([]*Fingerprint, error) {
 	})
 }
 
-func (r *cosmosRepo) addHost(h *Host) error {
+func (r *cosmosRepo) addHost(h ...*Host) error {
 	return r.WithTransaction(func(d *gorm.DB) error {
 		q := d.Clauses(clause.OnConflict{
 			DoNothing: true,
@@ -210,7 +243,7 @@ func (r *cosmosRepo) addHost(h *Host) error {
 	})
 }
 
-func (r *cosmosRepo) addFingerprint(f *Fingerprint) error {
+func (r *cosmosRepo) addFingerprint(f ...*Fingerprint) error {
 	return r.WithTransaction(func(d *gorm.DB) error {
 		q := d.Create(f)
 		if err := q.Error; err != nil {

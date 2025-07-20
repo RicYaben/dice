@@ -33,7 +33,7 @@ func projectCommands(conf dice.Configuration) []*cobra.Command {
 				name = args[0]
 			}
 
-			ad := dice.MakeAdapters(nil, conf.Paths.STATE_HOME, ".")
+			ad := dice.MakeAdapters(nil, &conf)
 			pAd := ad.Projects()
 			return pAd.AddProject(dice.Project{Name: name})
 		},
@@ -43,7 +43,7 @@ func projectCommands(conf dice.Configuration) []*cobra.Command {
 	projs := &cobra.Command{
 		Use: "projects",
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			ad := dice.MakeAdapters(nil, conf.Paths.STATE_HOME, ".")
+			ad := dice.MakeAdapters(nil, &conf)
 			pAd = ad.Projects()
 		},
 	}
@@ -65,7 +65,7 @@ func projectCommands(conf dice.Configuration) []*cobra.Command {
 
 			fmt.Printf("%-20s | %-50s\n", "Name", "Location")
 			for _, m := range ms {
-				fmt.Printf("%-20s | %-50s\n", m.Name, m.Home)
+				fmt.Printf("%-20s | %-50s\n", m.Name, m.Path)
 			}
 			return nil
 		},

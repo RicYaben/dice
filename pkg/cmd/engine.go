@@ -46,23 +46,31 @@ type InputFlags struct {
 }
 
 type lazyLoader struct {
-	conf     dice.Configuration
+	conf     *dice.Configuration
 	adapters dice.Adapters
 	composer dice.Composer
 	emitter  dice.Emitter
 }
 
 func newLazyEngineLoader(conf dice.Configuration) *lazyLoader {
-	return &lazyLoader{conf: conf}
+	return &lazyLoader{conf: &conf}
 }
 
 func (l *lazyLoader) preRunE(w WorkspaceFlags, e EngineFlags, c ComposerFlags) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
-		// TODO: not sure how to implement this
-		wk := dice.MakeWorkspace(w.Project, w.Study)
-
 		em := dice.NewEmitter()
-		ad := dice.MakeAdapters(em.Emit, l.conf.Paths.STATE_HOME, wk)
+		ad := dice.MakeAdapters(em.Emit, l.conf)
+
+		// Load the project configuration
+		pAd := ad.Projects()
+
+		var proj *dice.Project
+		if err := pAd.Find(proj, dice.Project{}); err != nil {
+			return errors.Wrap(err, "failed to load project")
+		}
+		ad = ad.SetConfig(l.conf.WithProject(proj))
+
+		// Create components with the named modules and signatures
 		comp := dice.NewComposer(ad.Composer())
 
 		if err := comp.Stage(dice.STAGE_MODULE, c.Modules...); err != nil {

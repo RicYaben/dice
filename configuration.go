@@ -122,9 +122,9 @@ func BindStandardPaths(stdpaths *StandardPaths) *StandardPaths {
 }
 
 type Configuration struct {
-	Paths   StandardPaths
+	paths   StandardPaths
 	profile string
-	//log     LogsFlags
+	project *Project
 }
 
 func (c *Configuration) Home() string {
@@ -143,12 +143,18 @@ func (c *Configuration) Modules() string {
 	panic("not implemented yet")
 }
 
+func (c *Configuration) WithProject(p *Project) *Configuration {
+	cp := *c
+	cp.project = p
+	return c
+}
+
 // Configuration without profile.
 // Everything is searched for and loaded from the current directory
 func baseConfig() Configuration {
 	return Configuration{
 		profile: "-",
-		Paths:   basicStandardPaths(),
+		paths:   basicStandardPaths(),
 	}
 }
 
@@ -158,6 +164,6 @@ func LoadConfiguration(stdpaths StandardPaths, conf *Configuration) error {
 		return errors.Wrap(err, "failed to initialize standard paths")
 	}
 
-	conf.Paths = stdpaths
+	conf.paths = stdpaths
 	return nil
 }

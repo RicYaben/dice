@@ -199,9 +199,10 @@ func (f *componentFactory) hookedComponentNodes(ep []GraphNode) func(Event) []Gr
 // Returns the list of hooked nodes
 func hookedNodesHandler(c CosmosAdapter, r *graphRegistry) func(Event) []GraphNode {
 	return func(e Event) []GraphNode {
-		hooks := c.FindHooks(e.ObjectID)
-		if len(hooks) == 0 {
-			return nil
+		hooks, err := c.FindHooks(e.ObjectID)
+		if err != nil {
+			// cannot recover from not finding hooks on a host
+			panic(err)
 		}
 		nodes := make([]GraphNode, 0, len(hooks))
 		for _, h := range hooks {

@@ -61,7 +61,7 @@ type CosmosAdapter interface {
 	GetLabel(uint) (*Label, error)
 
 	// Return a list of hooks
-	FindHooks(uint) []*Hook
+	FindHooks(uint) ([]*Hook, error)
 
 	// Find source files by their extension by the name of the source
 	// in the current study.
@@ -95,7 +95,7 @@ type SignatureAdapter interface {
 }
 
 type ProjectAdapter interface {
-	Find(result any, query []interface{}) error
+	Find(result any, query interface{}) error
 	AddProject(Project) error
 	AddStudy(Study) error
 }
@@ -190,28 +190,74 @@ func (a *composerAdapter) withRegistry(r registry) ComposerAdapter {
 }
 
 type cosmosAdapter struct {
-	eventBus
-	repo *cosmosRepo
+	eventAdapter
+	repo   *cosmosRepo
+	nodeID uint
 }
 
 func (a *cosmosAdapter) AddHost(h ...*Host) error {
-	return a.repo.addHost(h...)
+	if err := a.repo.addHost(h...); err != nil {
+		return err
+	}
+
+	for _, host := range h {
+		if err := a.makeEvent(HOST_EVENT, host.ID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (a *cosmosAdapter) AddFingerprint(f ...*Fingerprint) error {
-	return a.repo.addFingerprint(f...)
+	if err := a.repo.addFingerprint(f...); err != nil {
+		return err
+	}
+
+	for _, fp := range f {
+		if err := a.makeEvent(FINGERPRINT_EVENT, fp.ID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (a *cosmosAdapter) AddSource(s ...*Source) error {
-	return a.repo.addSource(s...)
+	if err := a.repo.addSource(s...); err != nil {
+		return err
+	}
+
+	for _, src := range s {
+		if err := a.makeEvent(SOURCE_EVENT, src.ID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (a *cosmosAdapter) AddLabel(l ...*Label) error {
-	return a.repo.addLabel(l...)
+	if err := a.repo.addSource(l...); err != nil {
+		return err
+	}
+
+	for _, lab := range l {
+		if err := a.makeEvent(LABEL_EVENT, lab.ID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (a *cosmosAdapter) AddScan(s ...*Scan) error {
-	return a.repo.addScan(s...)
+	if err := a.repo.addScan(s...); err != nil {
+		return err
+	}
+
+	for _, sc := range s {
+		if err := a.makeEvent(SCAN_EVENT, sc.ID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (a *cosmosAdapter) GetHost(id uint) (*Host, error) {
@@ -234,8 +280,8 @@ func (a *cosmosAdapter) GetScan(id uint) (*Scan, error) {
 	return a.repo.getScan(id)
 }
 
-func (a *cosmosAdapter) FindHooks(id uint) []*Hook {
-	panic("not implemented yet")
+func (a *cosmosAdapter) FindHooks(id uint) ([]*Hook, error) {
+	return a.repo.getHooks(id)
 }
 
 func (a *cosmosAdapter) FindSources(n []string, ext []string) ([]*Source, error) {
@@ -247,7 +293,7 @@ func (a *cosmosAdapter) Search(q string) ([]byte, error) {
 }
 
 func (a *cosmosAdapter) Query(q string) ([]*Host, error) {
-	panic("not implemented yet")
+	return a.repo.query(q)
 }
 
 type signatureAdapter struct {
@@ -276,11 +322,16 @@ type adapterFactory struct {
 	repos *repositoryRegistry
 }
 
-func MakeAdapters(bus eventBus, home, workspace string) *adapterFactory {
+func MakeAdapters(bus eventBus, conf *Configuration) *adapterFactory {
 	return &adapterFactory{
 		bus,
-		newRepositoryFactory(home, workspace),
+		newRepositoryFactory(conf),
 	}
+}
+
+func (f *adapterFactory) SetConfig(conf *Configuration) *adapterFactory {
+	f.repos.conf = conf
+	return f
 }
 
 func (f *adapterFactory) Cosmos() CosmosAdapter {

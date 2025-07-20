@@ -181,9 +181,17 @@ type Project struct {
 	gorm.Model
 
 	// Where the project lives
-	Home string
+	Path string
 	// Name of the project
 	Name string
+
+	Studies []*Study
+}
+
+type Study struct {
+	gorm.Model
+	Name string
+	Path string
 }
 
 type EventType uint8
