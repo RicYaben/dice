@@ -4,7 +4,7 @@ go 1.24
 
 require (
 	github.com/alecthomas/participle/v2 v2.1.4
-	github.com/spf13/pflag v1.0.6
+	github.com/spf13/pflag v1.0.7
 	google.golang.org/grpc v1.73.0
 	google.golang.org/protobuf v1.36.6
 	gorm.io/datatypes v1.2.6
