@@ -72,6 +72,8 @@ type CosmosAdapter interface {
 
 	// Search for hosts with criteria
 	Query(string) ([]*Host, error)
+
+	WithOrigin(uint) CosmosAdapter
 }
 
 // Adapter to manipulate signatures and modules
@@ -191,8 +193,13 @@ func (a *composerAdapter) withRegistry(r registry) ComposerAdapter {
 
 type cosmosAdapter struct {
 	eventAdapter
-	repo   *cosmosRepo
-	nodeID uint
+	repo *cosmosRepo
+}
+
+func (a *cosmosAdapter) WithOrigin(id uint) CosmosAdapter {
+	cp := *a
+	cp.eventAdapter.originID = id
+	return &cp
 }
 
 func (a *cosmosAdapter) AddHost(h ...*Host) error {
@@ -235,7 +242,7 @@ func (a *cosmosAdapter) AddSource(s ...*Source) error {
 }
 
 func (a *cosmosAdapter) AddLabel(l ...*Label) error {
-	if err := a.repo.addSource(l...); err != nil {
+	if err := a.repo.addLabel(l...); err != nil {
 		return err
 	}
 
@@ -336,14 +343,14 @@ func (f *adapterFactory) SetConfig(conf *Configuration) *adapterFactory {
 
 func (f *adapterFactory) Cosmos() CosmosAdapter {
 	return &cosmosAdapter{
-		eventBus: f.eventBus,
-		repo:     f.repos.Cosmos(),
+		eventAdapter: eventAdapter{bus: f.eventBus},
+		repo:         f.repos.Cosmos(),
 	}
 }
 
 func (f *adapterFactory) Engine() EngineAdapter {
 	return &engineAdapter{
-		eventAdapter: eventAdapter{},
+		eventAdapter: eventAdapter{originID: 0xD1CE, bus: f.eventBus},
 		repo:         f.repos.Sources(),
 	}
 }

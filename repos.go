@@ -219,6 +219,17 @@ func (r *cosmosRepo) getLabels(id ...uint) ([]*Label, error) {
 	})
 }
 
+func (r *cosmosRepo) getHooks(id uint) ([]*Hook, error) {
+	var h []*Hook
+	return h, r.WithTransaction(func(d *gorm.DB) error {
+		q := d.Find(h, Hook{ObjectID: id})
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to find labels")
+		}
+		return nil
+	})
+}
+
 func (r *cosmosRepo) getFingerprints(id ...uint) ([]*Fingerprint, error) {
 	var res []*Fingerprint
 	return res, r.WithTransaction(func(d *gorm.DB) error {
@@ -237,7 +248,7 @@ func (r *cosmosRepo) addHost(h ...*Host) error {
 		}).Create(h)
 
 		if err := q.Error; err != nil {
-			return errors.Wrap(err, "failed to create host")
+			return errors.Wrap(err, "failed to create host(s)")
 		}
 		return nil
 	})
@@ -247,17 +258,27 @@ func (r *cosmosRepo) addFingerprint(f ...*Fingerprint) error {
 	return r.WithTransaction(func(d *gorm.DB) error {
 		q := d.Create(f)
 		if err := q.Error; err != nil {
-			return errors.Wrap(err, "failed to create fingerprint")
+			return errors.Wrap(err, "failed to create fingerprint(s)")
 		}
 		return nil
 	})
 }
 
-func (r *cosmosRepo) addLabel(l *Label) error {
+func (r *cosmosRepo) addLabel(l ...*Label) error {
 	return r.WithTransaction(func(d *gorm.DB) error {
 		q := d.Create(l)
 		if err := q.Error; err != nil {
-			return errors.Wrap(err, "failed to create label")
+			return errors.Wrap(err, "failed to create label(s)")
+		}
+		return nil
+	})
+}
+
+func (r *cosmosRepo) addScan(s ...*Scan) error {
+	return r.WithTransaction(func(d *gorm.DB) error {
+		q := d.Create(s)
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to create scan(s)")
 		}
 		return nil
 	})
