@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/dice"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -74,50 +73,23 @@ func (o *operatorCmds) makeCommand() *cobra.Command {
 func signatureCommands(conf dice.Configuration) *cobra.Command {
 	o := &operatorCmds{name: "signature", conf: conf}
 
+	// Takes a number of glob-like names and adds them to the db
 	o.add = func(oc *operatorCmds, args []string) error {
-		var query []any
+		sAdapter := oc.adapters.Signatures()
+
+		// Query for all the signatures with a name like the globs
+		var globs []string
 		for _, name := range args {
 			name = globToSQLLike(name)
-			query = append(query, name)
-		}
-		query = append([]any{"name LIKE ?"}, query...)
-
-		sAdapter := oc.adapters.Signatures()
-		locs, err := sAdapter.Locate(dice.Signature{}, query)
-		if err != nil {
-			return err
+			globs = append(globs, name)
 		}
 
-		var psigs []*dice.Signature
-		parser := dice.NewParser()
-		for _, loc := range locs {
-			if loc.ObjectID > -1 {
-				continue
-			}
-
-			r, err := loc.Open()
-			if err != nil {
-				return errors.Wrapf(err, "failed to open signature %s", loc.Name)
-			}
-
-			psig, err := parser.Parse(loc.Name, r)
-			if err != nil {
-				return errors.Wrapf(err, "failed to parse signature %s", loc.Name)
-			}
-			psigs = append(psigs, &psig)
-		}
-
-		// This is weird, because some signatures may be referencing others
-		// so we need to add all of them at once in case there are
-		// dependencies between them
-		if err := sAdapter.AddSignatures(psigs...); err != nil {
-			return err
-		}
-		return nil
+		_, err := sAdapter.AddMissingSignatures(globs)
+		return err
 	}
 
 	o.remove = deleteHandler(&dice.Signature{})
-	o.list = listHandler(&dice.Signature{})
+	o.list = listHandler[dice.Signature]()
 	o.update = func(oc *operatorCmds) error {
 		return o.adapters.Signatures().Update()
 	}
@@ -129,50 +101,20 @@ func moduleCommands(conf dice.Configuration) *cobra.Command {
 
 	// register one or more modules into the database (by globs)
 	o.add = func(oc *operatorCmds, args []string) error {
-		var query []any
-		for _, name := range args {
-			name = globToSQLLike(name)
-			query = append(query, name)
-		}
-		query = append([]any{"name LIKE ?"}, query...)
-
 		sAdapter := oc.adapters.Signatures()
 
-		// Locate modules
-		locs, err := sAdapter.Locate(dice.Module{}, query)
-		if err != nil {
-			return err
+		var globs []string
+		for _, name := range args {
+			name = globToSQLLike(name)
+			globs = append(globs, name)
 		}
 
-		for _, loc := range locs {
-			if loc.ObjectID > -1 {
-				continue
-			}
-
-			mod := dice.Module{}
-
-			// get the module metadata. i.e., name, type, requirements,
-			// query, maintainer, version, help, description, etc.
-			m, err := sAdapter.LoadModule(mod)
-			if err != nil {
-				return err
-			}
-
-			props, err := m.Properties()
-			if err != nil {
-				return err
-			}
-			mod.Properties = props
-
-			if err := sAdapter.AddModule(&mod); err != nil {
-				return err
-			}
-		}
-		return nil
+		_, err := sAdapter.FindModuleFiles(globs)
+		return err
 	}
 
 	o.remove = deleteHandler(&dice.Module{})
-	o.list = listHandler(&dice.Module{})
+	o.list = listHandler[dice.Module]()
 	o.update = func(oc *operatorCmds) error {
 		return o.adapters.Signatures().Update()
 	}
@@ -183,7 +125,7 @@ type NamedImpl interface {
 	dice.Signature | dice.Module
 }
 
-func listHandler[M NamedImpl](model *M) func(oc *operatorCmds, args []string) error {
+func listHandler[M NamedImpl]() func(oc *operatorCmds, args []string) error {
 	return func(oc *operatorCmds, args []string) error {
 		var query []any
 		for _, name := range args {

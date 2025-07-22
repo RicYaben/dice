@@ -3,7 +3,12 @@
 // They include an event bus to which emitters can listen to.
 package dice
 
-import "github.com/dice/shared"
+import (
+	"os"
+	"slices"
+
+	"github.com/pkg/errors"
+)
 
 type Adapters interface {
 	Engine() EngineAdapter
@@ -28,15 +33,7 @@ type ComposerAdapter interface {
 	// Get the roots of a registered signature
 	GetRoots(uint) ([]*Node, error)
 
-	// TODO: may need a query to search for required signatures
-	// recursively.
-	// Raw query for signatures
 	Find(any, any) error
-
-	// Find signatures in the home directory
-	FindSignatures([]string) ([]*Signature, error)
-	// Find in the home directory
-	FindModules([]string) ([]*Module, error)
 
 	// make a copy with a registry
 	withRegistry(registry) ComposerAdapter
@@ -68,7 +65,7 @@ type CosmosAdapter interface {
 	FindSources(n []string, ext []string) ([]*Source, error)
 
 	// Search the cosmos db for some results. Raw queries
-	Search(string) ([]byte, error)
+	Find(m any, q any) error
 
 	// Search for hosts with criteria
 	Query(string) ([]*Host, error)
@@ -78,22 +75,24 @@ type CosmosAdapter interface {
 
 // Adapter to manipulate signatures and modules
 type SignatureAdapter interface {
-	Find(result any, query []interface{}) error
-	Remove(query []interface{}) error
-	Locate(model any, query []interface{}) ([]Location, error)
-	Update() error
-
 	// Loads a local signature.
 	AddSignatures(...*Signature) error
 	// Loads a local module
-	AddModule(*Module) error
+	AddModule(...*Module) error
+
 	// Get a registered signature
 	GetSignature(uint) (*Signature, error)
 	// Get a registered module
 	GetModule(uint) (*Module, error)
 
-	// Load a module
-	LoadModule(Module) (shared.Module, error)
+	// Find signatures in the home directory
+	AddMissingSignatures([]string) ([]*Signature, error)
+	// Find in the home directory
+	FindModuleFiles([]string) ([]*Module, error)
+
+	Find(t any, query any) error
+	Remove(query any) error
+	Update() error
 }
 
 type ProjectAdapter interface {
@@ -174,14 +173,6 @@ func (a *composerAdapter) Find(m any, q any) error {
 	return a.repo.find(m, q)
 }
 
-func (a *composerAdapter) FindSignatures(globs []string) ([]*Signature, error) {
-	return a.repo.findSignatureFiles(globs)
-}
-
-func (a *composerAdapter) FindModules(globs []string) ([]*Module, error) {
-	return a.repo.findModuleFiles(globs)
-}
-
 // TODO: dont know how to finish this
 func (a *composerAdapter) Cosmos(id uint) *cosmosAdapter {
 	return &cosmosAdapter{}
@@ -193,7 +184,8 @@ func (a *composerAdapter) withRegistry(r registry) ComposerAdapter {
 
 type cosmosAdapter struct {
 	eventAdapter
-	repo *cosmosRepo
+	repo    *cosmosRepo
+	sources *sourceRepo
 }
 
 func (a *cosmosAdapter) WithOrigin(id uint) CosmosAdapter {
@@ -291,12 +283,12 @@ func (a *cosmosAdapter) FindHooks(id uint) ([]*Hook, error) {
 	return a.repo.getHooks(id)
 }
 
-func (a *cosmosAdapter) FindSources(n []string, ext []string) ([]*Source, error) {
-	panic("not implemented yet")
+func (a *cosmosAdapter) FindSources(globs []string, ext []string) ([]*Source, error) {
+	return a.sources.findSourceFiles(globs, ext)
 }
 
-func (a *cosmosAdapter) Search(q string) ([]byte, error) {
-	return a.repo.search(q)
+func (a *cosmosAdapter) Find(m any, q any) error {
+	return a.repo.find(m, q)
 }
 
 func (a *cosmosAdapter) Query(q string) ([]*Host, error) {
@@ -323,6 +315,110 @@ func (a *signatureAdapter) GetModule(id uint) (Module, error) {
 	panic("not implemented yet")
 }
 
+func (a *signatureAdapter) AddMissingSignatures(g ...string) ([]*Signature, error) {
+	fpaths, err := a.repo.findFiles("signature", g)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to find files")
+	}
+
+	var names []string
+	for _, fpath := range fpaths {
+		info, err := os.Stat(fpath)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get signature file stats")
+		}
+		names = append(names, info.Name())
+	}
+
+	var sigs []*Signature
+	q := []string{"name IN ?"}
+	if err := a.repo.find(sigs, append(q, names...)); err != nil {
+		return nil, errors.Wrap(err, "failed to find signatures")
+	}
+
+	var sigNames []string
+	for _, m := range sigs {
+		sigNames = append(sigNames, m.Name)
+	}
+
+	var mSigs []*Signature
+	for i, n := range names {
+		if slices.Contains(sigNames, n) {
+			continue
+		}
+
+		sig, err := a.repo.parseSignatureFile(fpaths[i])
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to parse signature")
+		}
+		mSigs = append(mSigs, sig)
+	}
+
+	if err := a.repo.addSignature(mSigs...); err != nil {
+		return nil, errors.Wrap(err, "failed to register signature(s)")
+	}
+
+	return mSigs, nil
+}
+
+func (a *signatureAdapter) AddMissingModules(g ...string) ([]*Module, error) {
+
+	fpaths, err := a.repo.findFiles("module", g)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to find files")
+	}
+
+	var names []string
+	for _, fpath := range fpaths {
+		info, err := os.Stat(fpath)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get module file stats")
+		}
+		names = append(names, info.Name())
+	}
+
+	var mods []*Module
+	q := []string{"name IN ?"}
+	if err := a.repo.find(mods, append(q, names...)); err != nil {
+		return nil, errors.Wrap(err, "failed to find modules")
+	}
+
+	var modNames []string
+	for _, m := range mods {
+		modNames = append(modNames, m.Name)
+	}
+
+	var mMods []*Module
+	for i, n := range names {
+		if slices.Contains(modNames, n) {
+			continue
+		}
+
+		m := Module{
+			Name:     n,
+			Location: fpaths[i],
+		}
+
+		mod, err := LoadModule(m.Name, m.Location)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to load module")
+		}
+
+		banner, err := mod.Properties()
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to retrieve module banner")
+		}
+		m.Properties = banner
+		mMods = append(mMods, &m)
+	}
+
+	if err := a.repo.addModule(mMods...); err != nil {
+		return nil, errors.Wrap(err, "failed to add module(s)")
+	}
+
+	return mMods, nil
+}
+
 // Adapters factory
 type adapterFactory struct {
 	eventBus
@@ -345,6 +441,7 @@ func (f *adapterFactory) Cosmos() CosmosAdapter {
 	return &cosmosAdapter{
 		eventAdapter: eventAdapter{bus: f.eventBus},
 		repo:         f.repos.Cosmos(),
+		sources:      f.repos.Sources(),
 	}
 }
 

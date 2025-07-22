@@ -149,11 +149,15 @@ func (r *sourceRepo) findSourceFiles(globs, ext []string) ([]*Source, error) {
 
 type cosmosRepo struct {
 	Repository
-	cache *expirable.LRU[string, Host]
+	cache *expirable.LRU[uint, *Host]
 }
 
 // returns a host by id
 func (r *cosmosRepo) getHost(id uint) (*Host, error) {
+	if host, ok := r.cache.Get(id); ok {
+		return host, nil
+	}
+
 	var h *Host
 	return h, r.WithTransaction(func(d *gorm.DB) error {
 		q := d.First(h, id)
@@ -197,15 +201,54 @@ func (r *cosmosRepo) getScan(id uint) (*Scan, error) {
 	})
 }
 
-func (r *cosmosRepo) getHosts(id ...uint) ([]*Host, error) {
-	var h []*Host
-	return h, r.WithTransaction(func(d *gorm.DB) error {
-		q := d.Find(h, id)
+func (r *cosmosRepo) getSource(id uint) (*Source, error) {
+	var sc *Source
+	return sc, r.WithTransaction(func(d *gorm.DB) error {
+		q := d.First(sc, id)
 		if err := q.Error; err != nil {
-			return errors.Wrap(err, "failed to find hosts")
+			return errors.Wrap(err, "failed to find source")
 		}
 		return nil
 	})
+}
+
+func (r *cosmosRepo) getHosts(id ...uint) ([]*Host, error) {
+	var (
+		hosts   []*Host
+		pending []uint
+	)
+
+	for _, v := range id {
+		if host, ok := r.cache.Get(v); ok {
+			hosts = append(hosts, host)
+			continue
+		}
+		pending = append(pending, v)
+	}
+
+	if len(pending) == 0 {
+		return hosts, nil
+	}
+
+	var qHosts []*Host
+	err := r.WithTransaction(func(d *gorm.DB) error {
+		q := d.Find(qHosts, pending)
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to find hosts")
+		}
+
+		for _, host := range qHosts {
+			r.cache.Add(host.ID, host)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	hosts = append(hosts, qHosts...)
+	return hosts, nil
 }
 
 func (r *cosmosRepo) getLabels(id ...uint) ([]*Label, error) {
@@ -250,6 +293,10 @@ func (r *cosmosRepo) addHost(h ...*Host) error {
 		if err := q.Error; err != nil {
 			return errors.Wrap(err, "failed to create host(s)")
 		}
+
+		for _, host := range h {
+			r.cache.Add(host.ID, host)
+		}
 		return nil
 	})
 }
@@ -270,6 +317,11 @@ func (r *cosmosRepo) addLabel(l ...*Label) error {
 		if err := q.Error; err != nil {
 			return errors.Wrap(err, "failed to create label(s)")
 		}
+
+		// Expire the hosts linked to these labels
+		for _, lab := range l {
+			r.cache.Remove(lab.HostID)
+		}
 		return nil
 	})
 }
@@ -279,6 +331,37 @@ func (r *cosmosRepo) addScan(s ...*Scan) error {
 		q := d.Create(s)
 		if err := q.Error; err != nil {
 			return errors.Wrap(err, "failed to create scan(s)")
+		}
+		return nil
+	})
+}
+
+func (r *cosmosRepo) addSource(s ...*Source) error {
+	return r.WithTransaction(func(d *gorm.DB) error {
+		q := d.Create(s)
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to create source(s)")
+		}
+		return nil
+	})
+}
+
+func (r *cosmosRepo) find(m any, q any) error {
+	return r.WithTransaction(func(d *gorm.DB) error {
+		res := d.Where(m).Find(q)
+		if err := res.Error; err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+func (r *cosmosRepo) query(m any) ([]*Host, error) {
+	var hosts []*Host
+	return hosts, r.WithTransaction(func(d *gorm.DB) error {
+		res := d.Where(m).Find(hosts)
+		if err := res.Error; err != nil {
+			return err
 		}
 		return nil
 	})
@@ -304,17 +387,31 @@ func (r *eventRepo) getEvents(u ...uint) ([]*Event, error) {
 
 type signatureRepo struct {
 	Repository
-	conf *Configuration
+	parser Parser
+	conf   *Configuration
 }
 
-func (r *signatureRepo) addSignature(s *Signature) error {
+func (r *signatureRepo) addSignature(s ...*Signature) error {
 	return r.WithTransaction(func(d *gorm.DB) error {
 		q := d.Clauses(clause.OnConflict{
 			DoNothing: true,
 		}).Create(s)
 
 		if err := q.Error; err != nil {
-			return errors.Wrap(err, "failed to create signature")
+			return errors.Wrap(err, "failed to create signature(s)")
+		}
+		return nil
+	})
+}
+
+func (r *signatureRepo) addModule(m ...*Module) error {
+	return r.WithTransaction(func(d *gorm.DB) error {
+		q := d.Clauses(clause.OnConflict{
+			DoNothing: true,
+		}).Create(m)
+
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to create module(s)")
 		}
 		return nil
 	})
@@ -432,45 +529,59 @@ func (r *signatureRepo) find(m any, q any) error {
 	})
 }
 
-func (r *signatureRepo) findSignatureFiles(globs []string) ([]*Signature, error) {
-	fpath := r.conf.Signatures()
-	parser := NewParser()
+func (r *signatureRepo) parseSignatureFile(fpath string) (*Signature, error) {
+	info, err := os.Stat(fpath)
+	if err != nil {
+		return nil, err
+	}
 
-	var sigs []*Signature
-	withGlob := func(glob string) ([]*Signature, error) {
-		// Signatures have the ".dice" extension
-		if !strings.HasSuffix(glob, ".dice") {
-			glob += ".dice"
+	f, oErr := os.Open(fpath)
+	if oErr != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	sig, err := r.parser.Parse(info.Name(), f)
+	if err != nil {
+		return nil, err
+	}
+
+	return &sig, nil
+}
+
+func (r *signatureRepo) findFiles(t string, globs []string) ([]string, error) {
+	var fpath string
+	switch t {
+	case "signature":
+		fpath = r.conf.Signatures()
+		for i, g := range globs {
+			if !strings.HasPrefix(g, ".dice") {
+				globs[i] = g + ".dice"
+			}
 		}
+	case "module":
+		fpath = r.conf.Modules()
+	default:
+		return nil, errors.Errorf("unable to find DICE-related files of type %s", t)
+	}
 
+	var sPaths []string
+	withGlob := func(glob string) ([]string, error) {
 		matches, err := filepath.Glob(filepath.Join(fpath, glob))
 		if err != nil {
 			return nil, errors.Wrap(err, "invalid glob pattern")
 		}
 
-		var gSigs []*Signature
+		var gPaths []string
 		for _, match := range matches {
 			info, err := os.Stat(match)
 			if err != nil || info.IsDir() {
 				continue // we cannot stat this, or is a dir
 			}
 
-			// TODO: defer is too far into the loop, convert this into
-			// a function, and close the file as soon as we parse the signature
-			r, err := os.Open(match)
-			if err != nil {
-				return nil, err
-			}
-			defer r.Close()
-
-			sig, err := parser.Parse(info.Name(), r)
-			if err != nil {
-				return nil, err
-			}
-
-			gSigs = append(gSigs, &sig)
+			gPaths = append(gPaths, match)
 		}
-		return gSigs, nil
+		return sPaths, nil
 	}
 
 	for _, glob := range globs {
@@ -478,9 +589,9 @@ func (r *signatureRepo) findSignatureFiles(globs []string) ([]*Signature, error)
 		if err != nil {
 			return nil, err
 		}
-		sigs = append(sigs, globSigs...)
+		sPaths = append(sPaths, globSigs...)
 	}
-	return sigs, nil
+	return sPaths, nil
 }
 
 func (r *signatureRepo) findModuleFiles(globs []string) ([]*Module, error) {
@@ -648,6 +759,7 @@ func (r *repositoryRegistry) Signatures() *signatureRepo {
 	repo := r.builder.setModels(models).setName("signatures.db").build()
 	r.signatures = &signatureRepo{
 		repo,
+		NewParser(),
 		r.conf,
 	}
 	return r.signatures
@@ -686,7 +798,7 @@ func (r *repositoryRegistry) Cosmos() *cosmosRepo {
 		setName("cosmos.db").
 		build()
 
-	cache := expirable.NewLRU[string, Host](1e3, nil, 5*time.Minute)
+	cache := expirable.NewLRU[uint, *Host](1e3, nil, 5*time.Minute)
 	r.cosmos = &cosmosRepo{repo, cache}
 	return r.cosmos
 }

@@ -34,11 +34,11 @@ func Filter[T any](s []T, fn func(T) bool) []T {
 	return r
 }
 
-func LoadModule(m Module) (shared.Module, error) {
+func LoadModule(name string, fpath string) (shared.Module, error) {
 	client := plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig: shared.HandshakeConfig,
 		Plugins:         shared.PluginMap,
-		Cmd:             exec.Command("sh", "-c", m.Location),
+		Cmd:             exec.Command("sh", "-c", fpath),
 		AllowedProtocols: []plugin.Protocol{
 			plugin.ProtocolNetRPC, plugin.ProtocolGRPC,
 		},
@@ -46,7 +46,7 @@ func LoadModule(m Module) (shared.Module, error) {
 
 	rpcClient, err := client.Client()
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to load module %s", m.Name)
+		return nil, errors.Wrapf(err, "failed to load module %s", name)
 	}
 
 	raw, err := rpcClient.Dispense("module")
