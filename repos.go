@@ -1,11 +1,7 @@
 package dice
 
 import (
-	"crypto/md5"
-	"encoding/hex"
 	"fmt"
-	"io"
-	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -86,21 +82,6 @@ func (r *sourceRepo) addSource(s ...*Source) error {
 	})
 }
 
-func (r *sourceRepo) getSources(u ...uint) ([]*Source, error) {
-	var sources []*Source
-	err := r.WithTransaction(func(d *gorm.DB) error {
-		q := d.Find(sources, u)
-		if err := q.Error; err != nil {
-			return errors.Wrap(err, "failed to find sources")
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return sources, err
-}
-
 // Locates source files inside a scan by the name of the source
 func (r *sourceRepo) findSourceFiles(globs, ext []string) ([]*Source, error) {
 	// current workspace
@@ -164,6 +145,7 @@ func (r *cosmosRepo) getHost(id uint) (*Host, error) {
 		if err := q.Error; err != nil {
 			return errors.Wrap(err, "failed to find host")
 		}
+		r.cache.Add(h.ID, h)
 		return nil
 	})
 }
@@ -212,73 +194,12 @@ func (r *cosmosRepo) getSource(id uint) (*Source, error) {
 	})
 }
 
-func (r *cosmosRepo) getHosts(id ...uint) ([]*Host, error) {
-	var (
-		hosts   []*Host
-		pending []uint
-	)
-
-	for _, v := range id {
-		if host, ok := r.cache.Get(v); ok {
-			hosts = append(hosts, host)
-			continue
-		}
-		pending = append(pending, v)
-	}
-
-	if len(pending) == 0 {
-		return hosts, nil
-	}
-
-	var qHosts []*Host
-	err := r.WithTransaction(func(d *gorm.DB) error {
-		q := d.Find(qHosts, pending)
-		if err := q.Error; err != nil {
-			return errors.Wrap(err, "failed to find hosts")
-		}
-
-		for _, host := range qHosts {
-			r.cache.Add(host.ID, host)
-		}
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	hosts = append(hosts, qHosts...)
-	return hosts, nil
-}
-
-func (r *cosmosRepo) getLabels(id ...uint) ([]*Label, error) {
-	var l []*Label
-	return l, r.WithTransaction(func(d *gorm.DB) error {
-		q := d.Find(l, id)
-		if err := q.Error; err != nil {
-			return errors.Wrap(err, "failed to find labels")
-		}
-		return nil
-	})
-}
-
 func (r *cosmosRepo) getHooks(id uint) ([]*Hook, error) {
 	var h []*Hook
 	return h, r.WithTransaction(func(d *gorm.DB) error {
 		q := d.Find(h, Hook{ObjectID: id})
 		if err := q.Error; err != nil {
 			return errors.Wrap(err, "failed to find labels")
-		}
-		return nil
-	})
-}
-
-func (r *cosmosRepo) getFingerprints(id ...uint) ([]*Fingerprint, error) {
-	var res []*Fingerprint
-	return res, r.WithTransaction(func(d *gorm.DB) error {
-		q := d.Find(res, id)
-		if err := q.Error; err != nil {
-			return errors.Wrap(err, "failed to find fingerprints")
 		}
 		return nil
 	})
@@ -367,24 +288,6 @@ func (r *cosmosRepo) query(m any) ([]*Host, error) {
 	})
 }
 
-type eventRepo struct {
-	Repository
-}
-
-func (r *eventRepo) addEvent(e Event) error {
-	return r.WithTransaction(func(d *gorm.DB) error {
-		q := d.Create(e)
-		if err := q.Error; err != nil {
-			return errors.Wrap(err, "failed to create event")
-		}
-		return nil
-	})
-}
-
-func (r *eventRepo) getEvents(u ...uint) ([]*Event, error) {
-	panic("not impplemented yet")
-}
-
 type signatureRepo struct {
 	Repository
 	parser Parser
@@ -439,20 +342,9 @@ func (r *signatureRepo) getModule(u uint) (*Module, error) {
 	})
 }
 
-func (r *signatureRepo) getSignatures(u ...uint) ([]*Signature, error) {
-	var res []*Signature
-	return res, r.WithTransaction(func(d *gorm.DB) error {
-		q := d.Find(res, u)
-		if err := q.Error; err != nil {
-			return errors.Wrap(err, "failed to find fingerprints")
-		}
-		return nil
-	})
-}
-
-func (r *signatureRepo) removeSignatures(u ...uint) error {
+func (r *signatureRepo) remove(m any, q any) error {
 	return r.WithTransaction(func(d *gorm.DB) error {
-		q := d.Delete([]*Signature{}, u)
+		q := d.Delete(m, q)
 		if err := q.Error; err != nil {
 			return errors.Wrap(err, "failed to remove fingerprints")
 		}
@@ -460,39 +352,13 @@ func (r *signatureRepo) removeSignatures(u ...uint) error {
 	})
 }
 
-func (r *signatureRepo) deleteSignatures() error {
+func (r *signatureRepo) deleteAll() error {
 	return r.WithTransaction(func(conn *gorm.DB) error {
 		q := conn.Session(&gorm.Session{AllowGlobalUpdate: true})
-		if err := q.Unscoped().Select(clause.Associations).Delete(&Signature{}).Error; err != nil {
+		if err := q.Unscoped().Select(clause.Associations).Delete(&Signature{}, &Module{}).Error; err != nil {
 			return fmt.Errorf("failed to delete signatures with associations: %w", err)
 		}
 		return nil
-	})
-}
-
-func (r *signatureRepo) saveSignatures(signatures []*Signature) error {
-	return r.WithTransaction(func(d *gorm.DB) error {
-		if len(signatures) == 0 {
-			// no signatures to store
-			return nil
-		}
-
-		q := d.Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "name"}},
-			UpdateAll: true,
-		}).
-			Omit("Scans.Probes", "Scans.Rules", "Rules.Track").
-			Create(signatures)
-
-		if err := q.Error; err != nil {
-			return fmt.Errorf("failed to create signatures: %w", err)
-		}
-
-		if err := d.Save(signatures).Error; err != nil {
-			return fmt.Errorf("failed to save signatures: %w", err)
-		}
-		return nil
-
 	})
 }
 
@@ -565,7 +431,6 @@ func (r *signatureRepo) findFiles(t string, globs []string) ([]string, error) {
 		return nil, errors.Errorf("unable to find DICE-related files of type %s", t)
 	}
 
-	var sPaths []string
 	withGlob := func(glob string) ([]string, error) {
 		matches, err := filepath.Glob(filepath.Join(fpath, glob))
 		if err != nil {
@@ -581,9 +446,10 @@ func (r *signatureRepo) findFiles(t string, globs []string) ([]string, error) {
 
 			gPaths = append(gPaths, match)
 		}
-		return sPaths, nil
+		return gPaths, nil
 	}
 
+	var sPaths []string
 	for _, glob := range globs {
 		globSigs, err := withGlob(glob)
 		if err != nil {
@@ -594,86 +460,60 @@ func (r *signatureRepo) findFiles(t string, globs []string) ([]string, error) {
 	return sPaths, nil
 }
 
-func (r *signatureRepo) findModuleFiles(globs []string) ([]*Module, error) {
-	fpath := r.conf.Modules()
-
-	var mods []*Module
-	withGlob := func(glob string) ([]*Module, error) {
-		matches, err := filepath.Glob(filepath.Join(fpath, glob))
-		if err != nil {
-			return nil, errors.Wrap(err, "invalid glob pattern")
-		}
-
-		var gMods []*Module
-		for _, match := range matches {
-			info, err := os.Stat(match)
-			if err != nil || info.IsDir() {
-				continue // we cannot stat this, or is a dir
-			}
-
-			// TODO: same as above, close the file earlier
-			f, err := os.Open(match)
-			if err != nil {
-				log.Fatal(err)
-			}
-			defer f.Close()
-
-			h := md5.New()
-			if _, err := io.Copy(h, f); err != nil {
-				return nil, err
-			}
-
-			mod := &Module{
-				Name:     strings.TrimSuffix(info.Name(), filepath.Ext(match)),
-				Location: match,
-				Hash:     hex.EncodeToString(h.Sum(nil)),
-			}
-			gMods = append(gMods, mod)
-		}
-		return gMods, nil
-	}
-
-	for _, glob := range globs {
-		gMods, err := withGlob(glob)
-		if err != nil {
-			return nil, err
-		}
-		mods = append(mods, gMods...)
-	}
-
-	return mods, nil
-}
-
 type projectRepo struct {
 	Repository
-
-	currProject Project
 }
 
 // Add projects to the database
 // If successfully added, it creates DICE project files
 // in the project location
 // NOTE: projects have unique name-location pairs!
-func (r *projectRepo) addProject(proj *Project) error {
-	panic("not implemented yet")
+func (r *projectRepo) remove(proj ...*Project) (err error) {
+	for _, p := range proj {
+		if rerr := os.RemoveAll(path.Join(p.Path, ".dice")); err != nil {
+			err = errors.Wrap(rerr, "failed to clear project")
+		}
+	}
+	return
 }
 
-// Retrieve projects from the database
-func (r *projectRepo) getProjects(u ...uint) ([]*Project, error) {
-	panic("not implemented yet")
-}
+func (r *projectRepo) addProject(proj ...*Project) (err error) {
+	defer func() {
+		if err != nil {
+			r.remove(proj...)
+		}
+	}()
 
-// Remove projects form the database
-func (r *projectRepo) removeProjects(projs ...*Project) error {
-	panic("not implemented yet")
-}
+	for _, p := range proj {
+		f, err := os.Create(path.Join(p.Path, ".dice"))
+		if err != nil {
+			return err
+		}
 
-// Deletes all projects in the database
-func (r *projectRepo) deleteProjects() error {
+		// Store the settings. Noramlly empty on creation
+		if _, err := f.Write(p.Settings); err != nil {
+			return err
+		}
+	}
+
 	return r.WithTransaction(func(conn *gorm.DB) error {
-		q := conn.Session(&gorm.Session{AllowGlobalUpdate: true})
-		if err := q.Unscoped().Select(clause.Associations).Delete(&Project{}).Error; err != nil {
-			return errors.Wrap(err, "failed to delete projects with associations")
+		q := conn.Create(proj)
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to create project(s)")
+		}
+		return nil
+	})
+}
+
+func (r *projectRepo) addStudy(s ...*Study) (err error) {
+	panic("not implemented yet")
+}
+
+func (r *projectRepo) find(m any, q any) error {
+	return r.WithTransaction(func(d *gorm.DB) error {
+		res := d.Where(m).Find(q)
+		if err := res.Error; err != nil {
+			return err
 		}
 		return nil
 	})
@@ -738,7 +578,6 @@ type repositoryRegistry struct {
 
 	signatures *signatureRepo
 	projects   *projectRepo
-	events     *eventRepo
 	cosmos     *cosmosRepo
 	sources    *sourceRepo
 }
@@ -756,7 +595,7 @@ func (r *repositoryRegistry) Signatures() *signatureRepo {
 	}
 
 	models := []any{&Signature{}, &Module{}, &Node{}}
-	repo := r.builder.setModels(models).setName("signatures.db").build()
+	repo := r.builder.setModels(models).setName("signatures").build()
 	r.signatures = &signatureRepo{
 		repo,
 		NewParser(),
@@ -769,20 +608,9 @@ func (r *repositoryRegistry) Projects() *projectRepo {
 	if r.projects != nil {
 		return r.projects
 	}
-	repo := r.builder.setModels([]any{&Project{}}).setName("projects.db").build()
-	r.projects = &projectRepo{Repository: repo}
+	repo := r.builder.setModels([]any{&Project{}}).setName("projects").build()
+	r.projects = &projectRepo{repo}
 	return r.projects
-}
-
-func (r *repositoryRegistry) Events() *eventRepo {
-	if r.events != nil {
-		return r.events
-	}
-	// Events db is always in memory
-	b := newRepositoryBuilder("-", "-")
-	repo := b.setModels([]any{&Event{}}).build()
-	r.events = &eventRepo{repo}
-	return r.events
 }
 
 func (r *repositoryRegistry) Cosmos() *cosmosRepo {
@@ -795,7 +623,7 @@ func (r *repositoryRegistry) Cosmos() *cosmosRepo {
 	b := newRepositoryBuilder(".", r.builder.workspace)
 	repo := b.
 		setModels([]any{&Host{}, &Fingerprint{}, &Label{}, &Hook{}}).
-		setName("cosmos.db").
+		setName("cosmos").
 		build()
 
 	cache := expirable.NewLRU[uint, *Host](1e3, nil, 5*time.Minute)

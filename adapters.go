@@ -36,7 +36,7 @@ type ComposerAdapter interface {
 	Find(any, any) error
 
 	// make a copy with a registry
-	withRegistry(registry) ComposerAdapter
+	withRegistry(*registry) ComposerAdapter
 }
 
 type CosmosAdapter interface {
@@ -76,7 +76,7 @@ type CosmosAdapter interface {
 // Adapter to manipulate signatures and modules
 type SignatureAdapter interface {
 	// Loads a local signature.
-	AddSignatures(...*Signature) error
+	AddSignature(...*Signature) error
 	// Loads a local module
 	AddModule(...*Module) error
 
@@ -86,19 +86,19 @@ type SignatureAdapter interface {
 	GetModule(uint) (*Module, error)
 
 	// Find signatures in the home directory
-	AddMissingSignatures([]string) ([]*Signature, error)
+	AddMissingSignatures(...string) ([]*Signature, error)
 	// Find in the home directory
-	FindModuleFiles([]string) ([]*Module, error)
+	AddMissingModules(...string) ([]*Module, error)
 
-	Find(t any, query any) error
-	Remove(query any) error
+	Find(m any, query any) error
+	Remove(m any, query any) error
 	Update() error
 }
 
 type ProjectAdapter interface {
-	Find(result any, query interface{}) error
-	AddProject(Project) error
-	AddStudy(Study) error
+	Find(m any, query any) error
+	AddProject(...*Project) error
+	AddStudy(...*Study) error
 }
 
 // A common intreface for most adapters
@@ -144,7 +144,7 @@ func (a *engineAdapter) FindSources(s, ext []string) ([]*Source, error) {
 }
 
 type composerAdapter struct {
-	registry registry
+	registry *registry
 	repo     *signatureRepo
 }
 
@@ -178,7 +178,7 @@ func (a *composerAdapter) Cosmos(id uint) *cosmosAdapter {
 	return &cosmosAdapter{}
 }
 
-func (a *composerAdapter) withRegistry(r registry) ComposerAdapter {
+func (a *composerAdapter) withRegistry(r *registry) ComposerAdapter {
 	return &composerAdapter{r, a.repo}
 }
 
@@ -296,23 +296,24 @@ func (a *cosmosAdapter) Query(q string) ([]*Host, error) {
 }
 
 type signatureAdapter struct {
-	repo *signatureRepo
+	registry *registry
+	repo     *signatureRepo
 }
 
-func (a *signatureAdapter) AddSignature(sig Signature) error {
-	panic("not implemented yet")
+func (a *signatureAdapter) AddSignature(sig ...*Signature) error {
+	return a.repo.addSignature(sig...)
 }
 
-func (a *signatureAdapter) AddModule(mod Module) error {
-	panic("not implemented yet")
+func (a *signatureAdapter) AddModule(mod ...*Module) error {
+	return a.repo.addModule(mod...)
 }
 
-func (a *signatureAdapter) GetSignature(id uint) (Signature, error) {
-	panic("not implemented yet")
+func (a *signatureAdapter) GetSignature(id uint) (*Signature, error) {
+	return a.repo.getSignature(id)
 }
 
-func (a *signatureAdapter) GetModule(id uint) (Module, error) {
-	panic("not implemented yet")
+func (a *signatureAdapter) GetModule(id uint) (*Module, error) {
+	return a.repo.getModule(id)
 }
 
 func (a *signatureAdapter) AddMissingSignatures(g ...string) ([]*Signature, error) {
@@ -330,7 +331,7 @@ func (a *signatureAdapter) AddMissingSignatures(g ...string) ([]*Signature, erro
 		names = append(names, info.Name())
 	}
 
-	var sigs []*Signature
+	sigs := []*Signature{}
 	q := []string{"name IN ?"}
 	if err := a.repo.find(sigs, append(q, names...)); err != nil {
 		return nil, errors.Wrap(err, "failed to find signatures")
@@ -377,7 +378,7 @@ func (a *signatureAdapter) AddMissingModules(g ...string) ([]*Module, error) {
 		names = append(names, info.Name())
 	}
 
-	var mods []*Module
+	mods := []*Module{}
 	q := []string{"name IN ?"}
 	if err := a.repo.find(mods, append(q, names...)); err != nil {
 		return nil, errors.Wrap(err, "failed to find modules")
@@ -419,15 +420,57 @@ func (a *signatureAdapter) AddMissingModules(g ...string) ([]*Module, error) {
 	return mMods, nil
 }
 
+func (a *signatureAdapter) Remove(m any, q any) error {
+	return a.repo.remove(m, q)
+}
+
+func (a *signatureAdapter) Find(m any, q any) error {
+	return a.repo.find(m, q)
+}
+
+func (a *signatureAdapter) Update() error {
+	if err := a.repo.deleteAll(); err != nil {
+		return errors.Wrap(err, "failed to clear database")
+	}
+
+	if _, err := a.AddMissingModules("*"); err != nil {
+		return errors.Wrap(err, "failed to add missing modules")
+	}
+
+	if _, err := a.AddMissingSignatures("*"); err != nil {
+		return errors.Wrap(err, "failed to add missing signatures")
+	}
+
+	return nil
+}
+
+type projectAdapter struct {
+	repo *projectRepo
+}
+
+func (a *projectAdapter) AddProject(p ...*Project) error {
+	return a.repo.addProject(p...)
+}
+
+func (a *projectAdapter) AddStudy(s ...*Study) error {
+	return a.repo.addStudy(s...)
+}
+
+func (a *projectAdapter) Find(m any, q any) error {
+	return a.repo.find(m, q)
+}
+
 // Adapters factory
 type adapterFactory struct {
 	eventBus
-	repos *repositoryRegistry
+	registry *registry
+	repos    *repositoryRegistry
 }
 
 func MakeAdapters(bus eventBus, conf *Configuration) *adapterFactory {
 	return &adapterFactory{
 		bus,
+		&registry{},
 		newRepositoryFactory(conf),
 	}
 }
@@ -454,15 +497,20 @@ func (f *adapterFactory) Engine() EngineAdapter {
 
 func (f *adapterFactory) Composer() ComposerAdapter {
 	return &composerAdapter{
-		registry: registry{},
+		registry: f.registry,
 		repo:     f.repos.Signatures(),
 	}
 }
 
 func (f *adapterFactory) Signatures() SignatureAdapter {
-	panic("not implemented yet")
+	return &signatureAdapter{
+		registry: f.registry,
+		repo:     f.repos.Signatures(),
+	}
 }
 
 func (f *adapterFactory) Projects() ProjectAdapter {
-	panic("not implemented yet")
+	return &projectAdapter{
+		repo: f.repos.Projects(),
+	}
 }

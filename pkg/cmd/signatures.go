@@ -70,7 +70,7 @@ func (o *operatorCmds) makeCommand() *cobra.Command {
 	return cmd
 }
 
-func signatureCommands(conf dice.Configuration) *cobra.Command {
+func signatureCommand(conf dice.Configuration) *cobra.Command {
 	o := &operatorCmds{name: "signature", conf: conf}
 
 	// Takes a number of glob-like names and adds them to the db
@@ -84,11 +84,11 @@ func signatureCommands(conf dice.Configuration) *cobra.Command {
 			globs = append(globs, name)
 		}
 
-		_, err := sAdapter.AddMissingSignatures(globs)
+		_, err := sAdapter.AddMissingSignatures(globs...)
 		return err
 	}
 
-	o.remove = deleteHandler(&dice.Signature{})
+	o.remove = deleteHandler[dice.Signature]()
 	o.list = listHandler[dice.Signature]()
 	o.update = func(oc *operatorCmds) error {
 		return o.adapters.Signatures().Update()
@@ -96,7 +96,7 @@ func signatureCommands(conf dice.Configuration) *cobra.Command {
 	return o.makeCommand()
 }
 
-func moduleCommands(conf dice.Configuration) *cobra.Command {
+func moduleCommand(conf dice.Configuration) *cobra.Command {
 	o := &operatorCmds{name: "module", conf: conf}
 
 	// register one or more modules into the database (by globs)
@@ -109,11 +109,11 @@ func moduleCommands(conf dice.Configuration) *cobra.Command {
 			globs = append(globs, name)
 		}
 
-		_, err := sAdapter.FindModuleFiles(globs)
+		_, err := sAdapter.AddMissingModules(globs...)
 		return err
 	}
 
-	o.remove = deleteHandler(&dice.Module{})
+	o.remove = deleteHandler[dice.Module]()
 	o.list = listHandler[dice.Module]()
 	o.update = func(oc *operatorCmds) error {
 		return o.adapters.Signatures().Update()
@@ -152,7 +152,7 @@ func listHandler[M NamedImpl]() func(oc *operatorCmds, args []string) error {
 	}
 }
 
-func deleteHandler[M NamedImpl](model *M) func(oc *operatorCmds, args []string) error {
+func deleteHandler[M NamedImpl]() func(oc *operatorCmds, args []string) error {
 	return func(oc *operatorCmds, args []string) error {
 		var query []any
 		for _, name := range args {
@@ -162,7 +162,9 @@ func deleteHandler[M NamedImpl](model *M) func(oc *operatorCmds, args []string) 
 		query = append([]any{"name LIKE ?"}, query...)
 
 		adapter := oc.adapters.Signatures()
-		if err := adapter.Remove(query); err != nil {
+
+		var m M
+		if err := adapter.Remove(&m, query); err != nil {
 			return err
 		}
 		return nil

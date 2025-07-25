@@ -185,6 +185,8 @@ type Project struct {
 	// Name of the project
 	Name string
 
+	Settings datatypes.JSON
+
 	Studies []*Study
 }
 

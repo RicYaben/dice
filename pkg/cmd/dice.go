@@ -50,7 +50,10 @@ func Run() error {
 
 	com.AddCommand(engineCommands(conf)...)
 	com.AddCommand(projectCommands(conf)...)
-	com.AddCommand(signatureCommands(conf))
+	com.AddCommand(
+		signatureCommand(conf),
+		moduleCommand(conf),
+	)
 
 	return com.Execute()
 }

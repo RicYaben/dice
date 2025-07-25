@@ -43,11 +43,11 @@ func (r *registry) getOrCreateSignature(id uint) *Signature {
 
 type composer struct {
 	adapter  ComposerAdapter
-	registry registry
+	registry *registry
 }
 
 func NewComposer(adapter ComposerAdapter) *composer {
-	return &composer{adapter, registry{}}
+	return &composer{adapter, &registry{}}
 }
 
 // Preload signatures and modules. This is meant to find
@@ -64,7 +64,7 @@ func (c *composer) Stage(t StageType, name ...string) error {
 		c.registry.addSignature(sigs...)
 		return nil
 	case STAGE_MODULE:
-		var mods []*Module
+		mods := []*Module{}
 		if err := c.adapter.Find(mods, q); err != nil {
 			return errors.Wrap(err, "failed to find modules")
 		}
@@ -183,7 +183,7 @@ func (f *componentFactory) makeScanner() (*Component, error) {
 
 func (f *componentFactory) hookedComponentNodes(ep []GraphNode) func(Event) []GraphNode {
 	hooks := hookedNodesHandler(f.cosmos, f.reg)
-	targets := targetNodesHandler(f.cosmos, ep)
+	targets := targetNodesHandler(ep)
 
 	return func(e Event) []GraphNode {
 		if n := hooks(e); n != nil {
@@ -217,10 +217,10 @@ func hookedNodesHandler(c CosmosAdapter, r *graphRegistry) func(Event) []GraphNo
 }
 
 // Filter a list of nodes based on the event targets
-func targetNodesHandler(c CosmosAdapter, nodes []GraphNode) func(Event) []GraphNode {
+func targetNodesHandler(nodes []GraphNode) func(Event) []GraphNode {
 	return func(e Event) []GraphNode {
-		if len(e.Targets) > 0 {
-
+		if len(e.Targets) == 0 {
+			return nodes
 		}
 		return Filter(nodes, func(s GraphNode) bool {
 			return slices.Contains(e.Targets, s.Name())

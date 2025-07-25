@@ -2,8 +2,12 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
 
 	"github.com/dice"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
 
@@ -28,14 +32,27 @@ func projectCommands(conf dice.Configuration) []*cobra.Command {
 		`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := "."
-			if len(args) > 0 {
-				name = args[0]
+			p, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			proj := &dice.Project{Path: p}
+
+			var aliases = []string{".", "-"}
+			switch {
+			case len(args) > 0 && !slices.Contains(aliases, args[0]):
+				proj.Name = args[0]
+			default:
+				proj.Name = filepath.Base(p)
 			}
 
 			ad := dice.MakeAdapters(nil, &conf)
-			pAd := ad.Projects()
-			return pAd.AddProject(dice.Project{Name: name})
+			if err := ad.Projects().AddProject(proj); err != nil {
+				return err
+			}
+
+			log.Info().Msgf(`DICE project "%s" initialized in %s`, proj.Name, proj.Path)
+			return nil
 		},
 	}
 
