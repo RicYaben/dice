@@ -39,6 +39,24 @@ type ComposerAdapter interface {
 	withRegistry(*registry) ComposerAdapter
 }
 
+type NodeAdapter interface {
+	AddHost(...*Host) error
+	AddFingerprint(...*Fingerprint) error
+	AddSource(...*Source) error
+	AddScan(...*Scan) error
+	AddLabel(...*Label) error
+
+	GetHost(uint) (*Host, error)
+	GetFingerprint(uint) (*Fingerprint, error)
+	GetSource(uint) (*Source, error)
+	GetScan(uint) (*Scan, error)
+	GetLabel(uint) (*Label, error)
+
+	Query(string) ([]*Host, error)
+
+	withOriginID(uint) NodeAdapter
+}
+
 type CosmosAdapter interface {
 	// Add a new Host (creates a host)
 	AddHost(...*Host) error
@@ -62,15 +80,13 @@ type CosmosAdapter interface {
 
 	// Find source files by their extension by the name of the source
 	// in the current study.
-	FindSources(n []string, ext []string) ([]*Source, error)
+	FindSources(s, ext []string) ([]*Source, error)
 
 	// Search the cosmos db for some results. Raw queries
 	Find(m any, q any) error
 
 	// Search for hosts with criteria
 	Query(string) ([]*Host, error)
-
-	WithOrigin(uint) CosmosAdapter
 }
 
 // Adapter to manipulate signatures and modules
@@ -182,16 +198,21 @@ func (a *composerAdapter) withRegistry(r *registry) ComposerAdapter {
 	return &composerAdapter{r, a.repo}
 }
 
+type nodeAdapter struct {
+	*cosmosAdapter
+	originID uint
+}
+
+func (a *nodeAdapter) withOriginID(id uint) NodeAdapter {
+	cp := *a
+	cp.eventAdapter.originID = id
+	return &cp
+}
+
 type cosmosAdapter struct {
 	eventAdapter
 	repo    *cosmosRepo
 	sources *sourceRepo
-}
-
-func (a *cosmosAdapter) WithOrigin(id uint) CosmosAdapter {
-	cp := *a
-	cp.eventAdapter.originID = id
-	return &cp
 }
 
 func (a *cosmosAdapter) AddHost(h ...*Host) error {
@@ -283,8 +304,8 @@ func (a *cosmosAdapter) FindHooks(id uint) ([]*Hook, error) {
 	return a.repo.getHooks(id)
 }
 
-func (a *cosmosAdapter) FindSources(globs []string, ext []string) ([]*Source, error) {
-	return a.sources.findSourceFiles(globs, ext)
+func (a *cosmosAdapter) FindSources(s, ext []string) ([]*Source, error) {
+	return a.sources.findSourceFiles(s, ext)
 }
 
 func (a *cosmosAdapter) Find(m any, q any) error {
@@ -512,5 +533,15 @@ func (f *adapterFactory) Signatures() SignatureAdapter {
 func (f *adapterFactory) Projects() ProjectAdapter {
 	return &projectAdapter{
 		repo: f.repos.Projects(),
+	}
+}
+
+func (f *adapterFactory) Nodes() NodeAdapter {
+	return &nodeAdapter{
+		cosmosAdapter: &cosmosAdapter{
+			eventAdapter: eventAdapter{bus: f.eventBus},
+			repo:         f.repos.Cosmos(),
+			sources:      f.repos.Sources(),
+		},
 	}
 }

@@ -57,7 +57,7 @@ func (c *composer) Stage(t StageType, name ...string) error {
 	q = append(q, name...)
 	switch t {
 	case STAGE_SIGNATURE:
-		var sigs []*Signature
+		sigs := []*Signature{}
 		if err := c.adapter.Find(sigs, q); err != nil {
 			return errors.Wrap(err, "failed to find signatures")
 		}
@@ -86,16 +86,16 @@ func (c *composer) Stage(t StageType, name ...string) error {
 }
 
 // Compose components from signatures and actions. Only load named comps.
-func (c *composer) Compose(names []string) ([]*Component, error) {
+func (c *composer) Compose(names []string, nad NodeAdapter) ([]*Component, error) {
 	// make a component adapter with notion of a bunch of signatures
 	ad := c.adapter.withRegistry(c.registry)
 	factory := &componentFactory{
 		compAdapter: ad,
-		reg:         newGraphRegistry(ad),
+		reg:         NewGraphRegistry(ad, nad),
 	}
 	var comps []*Component
 	for _, n := range names {
-		comp, err := factory.makeComponent(n)
+		comp, err := factory.MakeComponent(n)
 		if err != nil {
 			return nil, err
 		}
@@ -110,7 +110,7 @@ type componentFactory struct {
 	reg         *graphRegistry
 }
 
-func (f *componentFactory) makeComponent(n string) (comp *Component, err error) {
+func (f *componentFactory) MakeComponent(n string) (comp *Component, err error) {
 	switch n {
 	case "identifier":
 		comp, err = f.makeIdentifier()
@@ -136,10 +136,10 @@ func (f *componentFactory) makeIdentifier() (*Component, error) {
 	}
 
 	return &Component{
-		Name:    "Identifier",
-		Adapter: f.cosmos,
-		Events:  []EventType{SOURCE_EVENT},
-		Nodes:   f.hookedComponentNodes(eps),
+		Name:        "identifier",
+		Adapter:     f.cosmos,
+		Events:      []EventType{SOURCE_EVENT},
+		NodesFilter: f.hookedComponentNodes(eps),
 	}, nil
 }
 
@@ -155,10 +155,10 @@ func (f *componentFactory) makeClassifier() (*Component, error) {
 	}
 
 	return &Component{
-		Name:    "Classifier",
-		Adapter: f.cosmos,
-		Events:  []EventType{FINGERPRINT_EVENT, HOST_EVENT},
-		Nodes:   f.hookedComponentNodes(eps),
+		Name:        "classifier",
+		Adapter:     f.cosmos,
+		Events:      []EventType{FINGERPRINT_EVENT, HOST_EVENT},
+		NodesFilter: f.hookedComponentNodes(eps),
 	}, nil
 }
 
@@ -174,10 +174,10 @@ func (f *componentFactory) makeScanner() (*Component, error) {
 	}
 
 	return &Component{
-		Name:    "Scanner",
-		Adapter: f.cosmos,
-		Events:  []EventType{SCAN_EVENT},
-		Nodes:   f.hookedComponentNodes(eps),
+		Name:        "scanner",
+		Adapter:     f.cosmos,
+		Events:      []EventType{SCAN_EVENT},
+		NodesFilter: f.hookedComponentNodes(eps),
 	}, nil
 }
 

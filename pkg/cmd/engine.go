@@ -81,7 +81,7 @@ func (l *lazyLoader) preRunE(w WorkspaceFlags, e EngineFlags, c ComposerFlags) f
 			return errors.Wrap(err, "failed to stage signatures")
 		}
 
-		components, err := comp.Compose(e.toList())
+		components, err := comp.Compose(e.toList(), ad.Nodes())
 		if err != nil {
 			return errors.Wrap(err, "failed to create components")
 		}

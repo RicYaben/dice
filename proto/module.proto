@@ -17,6 +17,7 @@ message Event {
 message HandleRequest {
     uint32 add_server = 1;
     Event event = 2;
+    uint32 propagation_server = 3;
 }
 
 service Module {
@@ -55,4 +56,8 @@ service Adapter {
     rpc LabelHost(LabelHostRequest) returns (Empty);
 
     rpc Query(QueryRequest) returns (QueryResponse);
+}
+
+service Propagate {
+  rpc Trigger(Empty) returns (Empty);
 }

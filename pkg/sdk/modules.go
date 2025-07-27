@@ -29,14 +29,11 @@ type Module struct {
 	Requirements any
 }
 
-// TODO: implement here a simple channel
-func (m *Module) Propagate() error { return nil }
-
 func (m *Module) Properties() ([]byte, error) {
 	return json.Marshal(m)
 }
 
-type Handler func(e shared.Event, m *Module, a shared.Adapter) error
+type Handler func(e shared.Event, m *Module, a shared.Adapter, cb func()) error
 
 // A simple wrapper to handle event requests
 type moduleImpl struct {
@@ -44,7 +41,7 @@ type moduleImpl struct {
 	handler Handler
 }
 
-func (impl *moduleImpl) Handle(e shared.Event, a shared.Adapter) error {
+func (impl *moduleImpl) Handle(e shared.Event, a shared.Adapter, cb func()) error {
 	switch impl.Type {
 	case "classifier":
 		if !slices.Contains([]string{"fingerprint", "host"}, e.Type()) {
@@ -54,7 +51,7 @@ func (impl *moduleImpl) Handle(e shared.Event, a shared.Adapter) error {
 		if err != nil {
 			return err
 		}
-		return impl.handler(e.WithHost(host), impl.Module, a)
+		return impl.handler(e.WithHost(host), impl.Module, a, cb)
 
 	case "identifier":
 		if e.Type() != "source" {
@@ -64,7 +61,7 @@ func (impl *moduleImpl) Handle(e shared.Event, a shared.Adapter) error {
 		if err != nil {
 			return err
 		}
-		return impl.handler(e.WithSource(src), impl.Module, a)
+		return impl.handler(e.WithSource(src), impl.Module, a, cb)
 
 	case "scanner":
 		if e.Type() != "source" {
@@ -74,7 +71,7 @@ func (impl *moduleImpl) Handle(e shared.Event, a shared.Adapter) error {
 		if err != nil {
 			return err
 		}
-		return impl.handler(e.WithScan(scan), impl.Module, a)
+		return impl.handler(e.WithScan(scan), impl.Module, a, cb)
 
 	default:
 		return fmt.Errorf("unknown module type: %s", impl.Type)

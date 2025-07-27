@@ -54,17 +54,45 @@ type graphNode struct {
 	module    shared.Module
 }
 
-func NewGraphNode(id uint, m *Module) *graphNode {
-	panic("not implemented yet")
+func NewGraphNode(id uint, m *Module, c *Connector) (*graphNode, error) {
+	mod, err := LoadModule(m.Name, m.Location)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to load module")
+	}
+
+	return &graphNode{
+		ID:        id,
+		Module:    m,
+		connector: c,
+		module:    mod,
+	}, nil
 }
 
 func (n *graphNode) Update(e Event) error {
-	// TODO: this should be some sort of closure.
-	// When calling "handle", we should add some kind of closure
-	// that calls handle on a goroutine, waits for error, and handles the propagation
-	// if there is any
+	ch := make(chan struct{}, 1)
+	cb := func() {
+		ch <- struct{}{}
+	}
 	ev := shared.NewEvent(string(e.Type), e.ID)
-	return n.module.Handle(ev, n.connector)
+
+	done := make(chan error, 1)
+	go func() {
+		if err := n.module.Handle(ev, n.connector, cb); err != nil {
+			done <- err
+		}
+		close(done)
+	}()
+
+	select {
+	case <-ch:
+		if err := n.propagate(e); err != nil {
+			return err
+		}
+
+		return <-done
+	case err := <-done:
+		return err
+	}
 }
 
 func (n *graphNode) Name() string {
@@ -120,15 +148,18 @@ type graphRegistry struct {
 	graphs map[uint]*graph
 	// Nodes loaded
 	nodes map[uint]GraphNode
+
+	connector Connector
 }
 
-func newGraphRegistry(ad ComposerAdapter) *graphRegistry {
+func NewGraphRegistry(ad ComposerAdapter, nad NodeAdapter) *graphRegistry {
 	return &graphRegistry{
 		adapter:      ad,
 		loadingSigs:  make(map[uint]struct{}),
 		loadingNodes: make(map[uint]struct{}),
 		graphs:       make(map[uint]*graph),
 		nodes:        make(map[uint]GraphNode),
+		connector:    Connector{Impl: nad},
 	}
 }
 
@@ -269,12 +300,18 @@ func (r *graphRegistry) makeGraphNode(node *Node) (*graphNode, error) {
 		return nil, errors.Wrapf(err, "failed to find module %d", node.ObjectID)
 	}
 
-	gnode := &graphNode{
-		ID:     node.ID,
-		Module: nmod,
+	gnode, err := NewGraphNode(node.ID, nmod, r.makeConnector(node.ID))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create graph node")
 	}
 
 	return gnode, nil
+}
+
+func (r *graphRegistry) makeConnector(id uint) *Connector {
+	ret := &r.connector
+	ret.Impl = ret.Impl.withOriginID(id)
+	return ret
 }
 
 // makes a new embedded graph node

@@ -155,11 +155,12 @@ func (x *Event) GetType() string {
 }
 
 type HandleRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AddServer     uint32                 `protobuf:"varint,1,opt,name=add_server,json=addServer,proto3" json:"add_server,omitempty"`
-	Event         *Event                 `protobuf:"bytes,2,opt,name=event,proto3" json:"event,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	AddServer         uint32                 `protobuf:"varint,1,opt,name=add_server,json=addServer,proto3" json:"add_server,omitempty"`
+	Event             *Event                 `protobuf:"bytes,2,opt,name=event,proto3" json:"event,omitempty"`
+	PropagationServer uint32                 `protobuf:"varint,3,opt,name=propagation_server,json=propagationServer,proto3" json:"propagation_server,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *HandleRequest) Reset() {
@@ -204,6 +205,13 @@ func (x *HandleRequest) GetEvent() *Event {
 		return x.Event
 	}
 	return nil
+}
+
+func (x *HandleRequest) GetPropagationServer() uint32 {
+	if x != nil {
+		return x.PropagationServer
+	}
+	return 0
 }
 
 type IDRequest struct {
@@ -400,11 +408,12 @@ const file_proto_module_proto_rawDesc = "" +
 	"\x06fields\x18\x01 \x01(\fR\x06fields\"+\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
-	"\x04type\x18\x02 \x01(\tR\x04type\"R\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\"\x81\x01\n" +
 	"\rHandleRequest\x12\x1d\n" +
 	"\n" +
 	"add_server\x18\x01 \x01(\rR\taddServer\x12\"\n" +
-	"\x05event\x18\x02 \x01(\v2\f.proto.EventR\x05event\"\x1b\n" +
+	"\x05event\x18\x02 \x01(\v2\f.proto.EventR\x05event\x12-\n" +
+	"\x12propagation_server\x18\x03 \x01(\rR\x11propagationServer\"\x1b\n" +
 	"\tIDRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\"$\n" +
 	"\fQueryRequest\x12\x14\n" +
@@ -428,7 +437,9 @@ const file_proto_module_proto_rawDesc = "" +
 	"\aAddScan\x12\v.proto.Scan\x1a\f.proto.Empty\x12(\n" +
 	"\tAddSource\x12\r.proto.Source\x1a\f.proto.Empty\x122\n" +
 	"\tLabelHost\x12\x17.proto.LabelHostRequest\x1a\f.proto.Empty\x122\n" +
-	"\x05Query\x12\x13.proto.QueryRequest\x1a\x14.proto.QueryResponseB\x05Z\x03pb/b\x06proto3"
+	"\x05Query\x12\x13.proto.QueryRequest\x1a\x14.proto.QueryResponse22\n" +
+	"\tPropagate\x12%\n" +
+	"\aTrigger\x12\f.proto.Empty\x1a\f.proto.EmptyB\x05Z\x03pb/b\x06proto3"
 
 var (
 	file_proto_module_proto_rawDescOnce sync.Once
@@ -473,20 +484,22 @@ var file_proto_module_proto_depIdxs = []int32{
 	12, // 11: proto.Adapter.AddSource:input_type -> proto.Source
 	7,  // 12: proto.Adapter.LabelHost:input_type -> proto.LabelHostRequest
 	5,  // 13: proto.Adapter.Query:input_type -> proto.QueryRequest
-	0,  // 14: proto.Module.Propagate:output_type -> proto.Empty
-	1,  // 15: proto.Module.Properties:output_type -> proto.Fields
-	0,  // 16: proto.Module.Handle:output_type -> proto.Empty
-	8,  // 17: proto.Adapter.GetHost:output_type -> proto.Host
-	12, // 18: proto.Adapter.GetSource:output_type -> proto.Source
-	11, // 19: proto.Adapter.GetScan:output_type -> proto.Scan
-	0,  // 20: proto.Adapter.AddLabel:output_type -> proto.Empty
-	0,  // 21: proto.Adapter.AddFingerprint:output_type -> proto.Empty
-	0,  // 22: proto.Adapter.AddScan:output_type -> proto.Empty
-	0,  // 23: proto.Adapter.AddSource:output_type -> proto.Empty
-	0,  // 24: proto.Adapter.LabelHost:output_type -> proto.Empty
-	6,  // 25: proto.Adapter.Query:output_type -> proto.QueryResponse
-	14, // [14:26] is the sub-list for method output_type
-	2,  // [2:14] is the sub-list for method input_type
+	0,  // 14: proto.Propagate.Trigger:input_type -> proto.Empty
+	0,  // 15: proto.Module.Propagate:output_type -> proto.Empty
+	1,  // 16: proto.Module.Properties:output_type -> proto.Fields
+	0,  // 17: proto.Module.Handle:output_type -> proto.Empty
+	8,  // 18: proto.Adapter.GetHost:output_type -> proto.Host
+	12, // 19: proto.Adapter.GetSource:output_type -> proto.Source
+	11, // 20: proto.Adapter.GetScan:output_type -> proto.Scan
+	0,  // 21: proto.Adapter.AddLabel:output_type -> proto.Empty
+	0,  // 22: proto.Adapter.AddFingerprint:output_type -> proto.Empty
+	0,  // 23: proto.Adapter.AddScan:output_type -> proto.Empty
+	0,  // 24: proto.Adapter.AddSource:output_type -> proto.Empty
+	0,  // 25: proto.Adapter.LabelHost:output_type -> proto.Empty
+	6,  // 26: proto.Adapter.Query:output_type -> proto.QueryResponse
+	0,  // 27: proto.Propagate.Trigger:output_type -> proto.Empty
+	15, // [15:28] is the sub-list for method output_type
+	2,  // [2:15] is the sub-list for method input_type
 	2,  // [2:2] is the sub-list for extension type_name
 	2,  // [2:2] is the sub-list for extension extendee
 	0,  // [0:2] is the sub-list for field type_name
@@ -506,7 +519,7 @@ func file_proto_module_proto_init() {
 			NumEnums:      0,
 			NumMessages:   8,
 			NumExtensions: 0,
-			NumServices:   2,
+			NumServices:   3,
 		},
 		GoTypes:           file_proto_module_proto_goTypes,
 		DependencyIndexes: file_proto_module_proto_depIdxs,

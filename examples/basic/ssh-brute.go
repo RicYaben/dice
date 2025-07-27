@@ -22,7 +22,7 @@ var labels = sdk.Labels{
 	},
 }
 
-func handler(e shared.Event, m *sdk.Module, a shared.Adapter) error {
+func handler(e shared.Event, m *sdk.Module, a shared.Adapter, propagate func()) error {
 	hosts, err := a.Query(fmt.Sprintf("protocol:ssh auth:true host:%d", e.ID()))
 	if err != nil {
 		return errors.Wrap(err, "failed to search for fingerprints")
@@ -30,7 +30,8 @@ func handler(e shared.Event, m *sdk.Module, a shared.Adapter) error {
 
 	for _, h := range hosts {
 		a.AddLabel(labels.MakeLabel("wac", h.ID))
-		return m.Propagate()
+		propagate()
+		return nil
 	}
 	return nil
 }

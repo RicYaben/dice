@@ -42,13 +42,11 @@ type Adapter interface {
 // This way, we avoid having modules to interact with the adapter
 // to query for the object, fill the information, etc
 type Module interface {
-	// Module sends a signal to propagate to the node children
-	Propagate() error
 	// Returns an object with the module properties, i.e., name, help
 	// info, description, usage, etc.
 	Properties() ([]byte, error)
 	// Handle the request
-	Handle(e Event, a Adapter) error
+	Handle(e Event, a Adapter, cb func()) error
 }
 
 type ModulePlugin struct {

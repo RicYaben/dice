@@ -143,7 +143,7 @@ func ToPluginSource(m *Source) *shared.Source {
 }
 
 type Connector struct {
-	Impl CosmosAdapter
+	Impl NodeAdapter
 }
 
 func (c *Connector) GetHost(id uint) (*shared.Host, error) {

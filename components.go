@@ -7,7 +7,7 @@ type Component struct {
 	Adapter CosmosAdapter
 	// A wraper for getting the relevant nodes
 	// NOTE: graphs are also nodes, just wrapped (GraphNode)
-	Nodes func(e Event) []GraphNode
+	NodesFilter func(e Event) []GraphNode
 	// Types of events the component listens to
 	Events []EventType
 }
@@ -16,7 +16,7 @@ type Component struct {
 // If the event points to some object with hooks,
 // the event is only pushed to the hookers
 func (c *Component) update(e Event) error {
-	for _, n := range c.Nodes(e) {
+	for _, n := range c.NodesFilter(e) {
 		if err := n.Update(e); err != nil {
 			return err
 		}

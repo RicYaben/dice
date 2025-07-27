@@ -6,6 +6,7 @@ import (
 
 	"github.com/dice/pb"
 	"github.com/hashicorp/go-plugin"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
 
@@ -14,29 +15,43 @@ type GRPCClient struct {
 	broker *plugin.GRPCBroker
 }
 
-func (m *GRPCClient) Handle(a Adapter, e Event) error {
+func (m *GRPCClient) Handle(a Adapter, e Event, cb func()) error {
+	// Setup Adapter server
 	adapterServer := &GRPCAdapterServer{Impl: a}
-
-	var s *grpc.Server
-	serverFunc := func(opts []grpc.ServerOption) *grpc.Server {
-		s = grpc.NewServer(opts...)
-		pb.RegisterAdapterServer(s, adapterServer)
-		return s
+	var aServer *grpc.Server
+	aFunc := func(opts []grpc.ServerOption) *grpc.Server {
+		aServer = grpc.NewServer(opts...)
+		pb.RegisterAdapterServer(aServer, adapterServer)
+		return aServer
 	}
 
-	brokerID := m.broker.NextId()
-	go m.broker.AcceptAndServe(brokerID, serverFunc)
+	aBrokerID := m.broker.NextId()
+	go m.broker.AcceptAndServe(aBrokerID, aFunc)
+
+	// Setup Propagation callback server
+	pServer := &GRPCPropagationServer{cb: cb}
+	var propServer *grpc.Server
+	pFunc := func(opts []grpc.ServerOption) *grpc.Server {
+		propServer = grpc.NewServer(opts...)
+		pb.RegisterPropagateServer(propServer, pServer)
+		return propServer
+	}
+
+	pBrokerID := m.broker.NextId()
+	go m.broker.AcceptAndServe(pBrokerID, pFunc)
 
 	_, err := m.client.Handle(context.Background(), &pb.HandleRequest{
 		// adapter server
-		AddServer: brokerID,
+		AddServer:         aBrokerID,
+		PropagationServer: pBrokerID,
 		Event: &pb.Event{
 			Id:   uint32(e.ID()),
 			Type: e.Type(),
 		},
 	})
 
-	s.Stop()
+	aServer.Stop()
+	propServer.Stop()
 	return err
 }
 
@@ -59,17 +74,25 @@ type GRPCModuleServer struct {
 func (m *GRPCModuleServer) Handle(ctx context.Context, req *pb.HandleRequest) (*pb.Empty, error) {
 	conn, err := m.broker.Dial(req.AddServer)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to dial adapter server")
 	}
-	defer func() { _ = conn.Close() }()
+	defer conn.Close()
 
-	a := &GRPCAdapterClient{pb.NewAdapterClient(conn)}
-	e := NewEvent(req.Event.Type, uint(req.Event.Id))
-	return &pb.Empty{}, m.Impl.Handle(e, a)
-}
+	adapter := &GRPCAdapterClient{pb.NewAdapterClient(conn)}
 
-func (m *GRPCModuleServer) Propagate(ctx context.Context, req *pb.Empty) (*pb.Empty, error) {
-	return &pb.Empty{}, m.Impl.Propagate()
+	propagateConn, err := m.broker.Dial(req.PropagationServer)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to dial propagation server")
+	}
+	defer propagateConn.Close()
+
+	propagateClient := pb.NewPropagateClient(propagateConn)
+	propagate := func() {
+		propagateClient.Trigger(context.Background(), &pb.Empty{})
+	}
+
+	event := NewEvent(req.Event.Type, uint(req.Event.Id))
+	return &pb.Empty{}, m.Impl.Handle(event, adapter, propagate)
 }
 
 func (m *GRPCModuleServer) Properties(ctx context.Context, req *pb.Empty) (*pb.Fields, error) {
@@ -219,4 +242,16 @@ func (m *GRPCAdapterServer) AddScan(ctx context.Context, req *pb.Scan) (*pb.Empt
 func (m *GRPCAdapterServer) AddSource(ctx context.Context, req *pb.Source) (*pb.Empty, error) {
 	src := FromProtoSource(req)
 	return &pb.Empty{}, m.Impl.AddSource(src)
+}
+
+type GRPCPropagationServer struct {
+	pb.UnimplementedPropagateServer
+	cb func()
+}
+
+func (s *GRPCPropagationServer) Trigger(context.Context, *pb.Empty) (*pb.Empty, error) {
+	if s.cb != nil {
+		s.cb()
+	}
+	return &pb.Empty{}, nil
 }
