@@ -69,30 +69,18 @@ func NewGraphNode(id uint, m *Module, c *Connector) (*graphNode, error) {
 }
 
 func (n *graphNode) Update(e Event) error {
-	ch := make(chan struct{}, 1)
+	// callback to propagate
+	var pErr error
 	cb := func() {
-		ch <- struct{}{}
+		pErr = n.propagate(e)
 	}
+
+	// Handle the event
 	ev := shared.NewEvent(string(e.Type), e.ID)
-
-	done := make(chan error, 1)
-	go func() {
-		if err := n.module.Handle(ev, n.connector, cb); err != nil {
-			done <- err
-		}
-		close(done)
-	}()
-
-	select {
-	case <-ch:
-		if err := n.propagate(e); err != nil {
-			return err
-		}
-
-		return <-done
-	case err := <-done:
+	if err := n.module.Handle(ev, n.connector, cb); err != nil {
 		return err
 	}
+	return pErr
 }
 
 func (n *graphNode) Name() string {
