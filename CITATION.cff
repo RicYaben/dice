@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use or want to mention DICE, please cite it as below."
+authors:
+- family-names: "Yaben"
+  given-names: "Ricardo"
+  orcid: "https://orcid.org/0009-0007-3608-8883"
+- family-names: "Vasilomanolakis"
+  given-names: "Emmanouil"
+  orcid: "https://orcid.org/0000-0001-5068-9158"
+title: "DICE: Device Identification and Classification Engine"
+url: "https://github.com/RicYaben/dice"
