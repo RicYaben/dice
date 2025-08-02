@@ -186,16 +186,6 @@ Right now, the best way to support DICE is by using it or contributing to its de
 
 ## Citing DICE
 
-If you are a researcher using DICE, please use the following reference:
-
-```bib
-@misc{yaben2025dice,
-    title={{DICE}: Device Identification and Classification Engine},
-    author={Yaben, Ricardo and Vasilomanolakis, Emmanouil},
-    url="https://github.com/RicYaben/dice",
-    year={2025}
-}
-```
-
-You are welcome to cite any other of our recent publications using DICE.
+If you are a researcher using or discussing about DICE, please use the reference included in this repository.
+You are welcome to cite any other of our recent publications using DICE, we maintain a [separate repository](https://github.com/RicYaben/dice-publications.git) with all the publications where we used DICE, including presentation slides, posters, etc.
 If you have any question, [get in contact](docs/contact.md).
