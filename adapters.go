@@ -6,8 +6,10 @@ package dice
 import (
 	"os"
 	"slices"
+	"strings"
 
 	"github.com/pkg/errors"
+	"gorm.io/gorm"
 )
 
 type Adapters interface {
@@ -33,7 +35,7 @@ type ComposerAdapter interface {
 	// Get the roots of a registered signature
 	GetRoots(uint) ([]*Node, error)
 
-	Find(any, any) error
+	Find(m, q any, args ...any) error
 
 	// make a copy with a registry
 	withRegistry(*registry) ComposerAdapter
@@ -83,7 +85,7 @@ type CosmosAdapter interface {
 	FindSources(s, ext []string) ([]*Source, error)
 
 	// Search the cosmos db for some results. Raw queries
-	Find(m any, q any) error
+	Find(m, q any, args ...any) error
 
 	// Search for hosts with criteria
 	Query(string) ([]*Host, error)
@@ -106,13 +108,14 @@ type SignatureAdapter interface {
 	// Find in the home directory
 	AddMissingModules(...string) ([]*Module, error)
 
-	Find(m any, query any) error
+	Find(m, query any, args ...any) error
 	Remove(m any, query any) error
 	Update() error
+	ChangeLocation(string)
 }
 
 type ProjectAdapter interface {
-	Find(m any, query any) error
+	Find(m, q any, args ...any) error
 	AddProject(...*Project) error
 	AddStudy(...*Study) error
 }
@@ -185,8 +188,8 @@ func (a *composerAdapter) GetRoots(id uint) ([]*Node, error) {
 	return a.repo.getRoots(id)
 }
 
-func (a *composerAdapter) Find(m any, q any) error {
-	return a.repo.find(m, q)
+func (a *composerAdapter) Find(m any, q any, args ...any) error {
+	return a.repo.find(m, q, args...)
 }
 
 // TODO: dont know how to finish this
@@ -200,7 +203,6 @@ func (a *composerAdapter) withRegistry(r *registry) ComposerAdapter {
 
 type nodeAdapter struct {
 	*cosmosAdapter
-	originID uint
 }
 
 func (a *nodeAdapter) withOriginID(id uint) NodeAdapter {
@@ -308,8 +310,8 @@ func (a *cosmosAdapter) FindSources(s, ext []string) ([]*Source, error) {
 	return a.sources.findSourceFiles(s, ext)
 }
 
-func (a *cosmosAdapter) Find(m any, q any) error {
-	return a.repo.find(m, q)
+func (a *cosmosAdapter) Find(m, q any, args ...any) error {
+	return a.repo.find(m, q, args...)
 }
 
 func (a *cosmosAdapter) Query(q string) ([]*Host, error) {
@@ -349,12 +351,13 @@ func (a *signatureAdapter) AddMissingSignatures(g ...string) ([]*Signature, erro
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get signature file stats")
 		}
-		names = append(names, info.Name())
+		name := strings.TrimSuffix(info.Name(), ".dice")
+		names = append(names, name)
 	}
 
+	// Found in the db
 	sigs := []*Signature{}
-	q := []string{"name IN ?"}
-	if err := a.repo.find(sigs, append(q, names...)); err != nil {
+	if err := a.repo.find(&sigs, "name IN ?", names); err != nil {
 		return nil, errors.Wrap(err, "failed to find signatures")
 	}
 
@@ -376,15 +379,32 @@ func (a *signatureAdapter) AddMissingSignatures(g ...string) ([]*Signature, erro
 		mSigs = append(mSigs, sig)
 	}
 
-	if err := a.repo.addSignature(mSigs...); err != nil {
-		return nil, errors.Wrap(err, "failed to register signature(s)")
+	if len(mSigs) == 0 {
+		return nil, nil
+	}
+
+	// First create the signatures and then knit the nodes
+	tErr := a.repo.WithTransaction(func(d *gorm.DB) error {
+		if err := a.repo.addSignature(mSigs...); err != nil {
+			return errors.Wrap(err, "failed to register signature(s)")
+		}
+
+		for _, sig := range mSigs {
+			for _, n := range sig.Nodes {
+				sig.createNode(n, d)
+			}
+		}
+		return nil
+	})
+
+	if tErr != nil {
+		return nil, errors.Wrap(err, "failed to add missing signatures")
 	}
 
 	return mSigs, nil
 }
 
 func (a *signatureAdapter) AddMissingModules(g ...string) ([]*Module, error) {
-
 	fpaths, err := a.repo.findFiles("module", g)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to find files")
@@ -400,8 +420,7 @@ func (a *signatureAdapter) AddMissingModules(g ...string) ([]*Module, error) {
 	}
 
 	mods := []*Module{}
-	q := []string{"name IN ?"}
-	if err := a.repo.find(mods, append(q, names...)); err != nil {
+	if err := a.repo.find(&mods, "name IN ?", names); err != nil {
 		return nil, errors.Wrap(err, "failed to find modules")
 	}
 
@@ -434,6 +453,10 @@ func (a *signatureAdapter) AddMissingModules(g ...string) ([]*Module, error) {
 		mMods = append(mMods, &m)
 	}
 
+	if len(mMods) == 0 {
+		return nil, nil
+	}
+
 	if err := a.repo.addModule(mMods...); err != nil {
 		return nil, errors.Wrap(err, "failed to add module(s)")
 	}
@@ -445,8 +468,8 @@ func (a *signatureAdapter) Remove(m any, q any) error {
 	return a.repo.remove(m, q)
 }
 
-func (a *signatureAdapter) Find(m any, q any) error {
-	return a.repo.find(m, q)
+func (a *signatureAdapter) Find(m, q any, args ...any) error {
+	return a.repo.find(m, q, args...)
 }
 
 func (a *signatureAdapter) Update() error {
@@ -465,6 +488,10 @@ func (a *signatureAdapter) Update() error {
 	return nil
 }
 
+func (a *signatureAdapter) ChangeLocation(l string) {
+	a.repo.Repository.changeLocation(l)
+}
+
 type projectAdapter struct {
 	repo *projectRepo
 }
@@ -477,8 +504,8 @@ func (a *projectAdapter) AddStudy(s ...*Study) error {
 	return a.repo.addStudy(s...)
 }
 
-func (a *projectAdapter) Find(m any, q any) error {
-	return a.repo.find(m, q)
+func (a *projectAdapter) Find(m, q any, args ...any) error {
+	return a.repo.find(m, q, args...)
 }
 
 // Adapters factory

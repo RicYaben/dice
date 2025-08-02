@@ -53,19 +53,18 @@ func NewComposer(adapter ComposerAdapter) *composer {
 // Preload signatures and modules. This is meant to find
 // signatures and register them into a common registry.
 func (c *composer) Stage(t StageType, name ...string) error {
-	q := []string{"name LIKE ?"}
-	q = append(q, name...)
+	q := "name LIKE ?"
 	switch t {
 	case STAGE_SIGNATURE:
 		sigs := []*Signature{}
-		if err := c.adapter.Find(sigs, q); err != nil {
+		if err := c.adapter.Find(sigs, q, name); err != nil {
 			return errors.Wrap(err, "failed to find signatures")
 		}
 		c.registry.addSignature(sigs...)
 		return nil
 	case STAGE_MODULE:
 		mods := []*Module{}
-		if err := c.adapter.Find(mods, q); err != nil {
+		if err := c.adapter.Find(mods, q, name); err != nil {
 			return errors.Wrap(err, "failed to find modules")
 		}
 		sig := c.registry.getOrCreateSignature(0)

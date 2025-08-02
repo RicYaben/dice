@@ -10,12 +10,12 @@ import (
 	"google.golang.org/grpc"
 )
 
-type GRPCClient struct {
+type GRPCModuleClient struct {
 	client pb.ModuleClient
 	broker *plugin.GRPCBroker
 }
 
-func (m *GRPCClient) Handle(a Adapter, e Event, cb func()) error {
+func (m *GRPCModuleClient) Handle(e Event, a Adapter, cb func()) error {
 	// Setup Adapter server
 	adapterServer := &GRPCAdapterServer{Impl: a}
 	var aServer *grpc.Server
@@ -55,7 +55,7 @@ func (m *GRPCClient) Handle(a Adapter, e Event, cb func()) error {
 	return err
 }
 
-func (m *GRPCClient) Properties() ([]byte, error) {
+func (m *GRPCModuleClient) Properties() ([]byte, error) {
 	resp, err := m.client.Properties(context.Background(), &pb.Empty{})
 	if err != nil {
 		return nil, err

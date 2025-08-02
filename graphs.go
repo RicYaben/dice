@@ -70,9 +70,15 @@ func NewGraphNode(id uint, m *Module, c *Connector) (*graphNode, error) {
 
 func (n *graphNode) Update(e Event) error {
 	// callback to propagate
-	var pErr error
+	propResp := struct {
+		err    error
+		called bool
+	}{nil, false}
+
 	cb := func() {
-		pErr = n.propagate(e)
+		if !propResp.called {
+			propResp.err = n.propagate(e)
+		}
 	}
 
 	// Handle the event
@@ -80,7 +86,8 @@ func (n *graphNode) Update(e Event) error {
 	if err := n.module.Handle(ev, n.connector, cb); err != nil {
 		return err
 	}
-	return pErr
+
+	return propResp.err
 }
 
 func (n *graphNode) Name() string {

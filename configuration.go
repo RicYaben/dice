@@ -25,9 +25,13 @@ type StandardPaths struct {
 	DATA_HOME string
 }
 
-func basicStandardPaths() StandardPaths {
-	var here = "."
-	return StandardPaths{"dice", here, here, here}
+func PWDStandardPaths() StandardPaths {
+	wd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+
+	return StandardPaths{"dice", wd, wd, wd}
 }
 
 func (s StandardPaths) init() error {
@@ -60,7 +64,7 @@ func (b *stdpathsBuilder) withStdpaths(stdpaths *StandardPaths) *stdpathsBuilder
 }
 
 func (b *stdpathsBuilder) isValid(val string) bool {
-	return slices.Contains([]string{"", "-"}, val)
+	return !slices.Contains([]string{"", "-"}, val)
 }
 
 func (b *stdpathsBuilder) bind(val, env, def string) string {
@@ -97,7 +101,7 @@ func (b *stdpathsBuilder) setState(val string) *stdpathsBuilder {
 }
 
 func (b *stdpathsBuilder) setData(val string) *stdpathsBuilder {
-	b.state = b.bindToApp(val, "XDG_DATA_HOME", path.Join(b.home, ".local", "share"))
+	b.data = b.bindToApp(val, "XDG_DATA_HOME", path.Join(b.home, ".local", "share"))
 	return b
 }
 
@@ -123,39 +127,43 @@ func BindStandardPaths(stdpaths *StandardPaths) *StandardPaths {
 
 type Configuration struct {
 	paths   StandardPaths
-	profile string
 	project *Project
+	study   *Study
 }
 
+// Returns the location where we store databases, modules, and signatures
 func (c *Configuration) Home() string {
-	panic("not implemented yet")
+	return c.paths.DATA_HOME
 }
 
+func (c *Configuration) Project() string {
+	if c.project != nil {
+		return c.project.Path
+	}
+	return c.paths.STATE_HOME
+}
+
+// Returns the location where the current run will output data to
+// If no project is set, return the data location
 func (c *Configuration) Workspace() string {
-	panic("not implemented yet")
+	if c.study != nil {
+		return c.study.Path
+	}
+	return c.Project()
 }
 
 func (c *Configuration) Signatures() string {
-	panic("not implemented yet")
+	return path.Join(c.Home(), "signatures")
 }
 
 func (c *Configuration) Modules() string {
-	panic("not implemented yet")
+	return path.Join(c.Home(), "modules")
 }
 
 func (c *Configuration) WithProject(p *Project) *Configuration {
 	cp := *c
 	cp.project = p
 	return c
-}
-
-// Configuration without profile.
-// Everything is searched for and loaded from the current directory
-func baseConfig() Configuration {
-	return Configuration{
-		profile: "-",
-		paths:   basicStandardPaths(),
-	}
 }
 
 func LoadConfiguration(stdpaths StandardPaths, conf *Configuration) error {

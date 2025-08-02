@@ -63,7 +63,7 @@ func (p *ModulePlugin) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server) err
 }
 
 func (p *ModulePlugin) GRPCClient(ctx context.Context, broker *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
-	return &GRPCClient{
+	return &GRPCModuleClient{
 		client: pb.NewModuleClient(c),
 		broker: broker,
 	}, nil

@@ -134,7 +134,7 @@ func listHandler[M NamedImpl]() func(oc *operatorCmds, args []string) error {
 		}
 		query = append([]any{"name LIKE ?"}, query...)
 
-		var ms []M
+		var ms []*M
 		adapter := oc.adapters.Signatures()
 		if err := adapter.Find(&ms, query); err != nil {
 			return err

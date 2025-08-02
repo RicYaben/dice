@@ -21,12 +21,13 @@ type DatabaseLocation string
 
 const (
 	NO_DATABASE       DatabaseLocation = ""
-	INMEMORY_DATABASE DatabaseLocation = ":memory:"
+	INMEMORY_DATABASE DatabaseLocation = "file::memory:?cache=shared"
 )
 
 type Repository interface {
 	WithTransaction(fn func(*gorm.DB) error) error
 	connect() (*gorm.DB, error)
+	changeLocation(l string)
 }
 
 type repository struct {
@@ -65,6 +66,11 @@ func (r *repository) connect() (*gorm.DB, error) {
 	r.db = db
 
 	return db, nil
+}
+
+func (r *repository) changeLocation(l string) {
+	r.location = l
+	r.db = nil
 }
 
 type sourceRepo struct {
@@ -197,7 +203,7 @@ func (r *cosmosRepo) getSource(id uint) (*Source, error) {
 func (r *cosmosRepo) getHooks(id uint) ([]*Hook, error) {
 	var h []*Hook
 	return h, r.WithTransaction(func(d *gorm.DB) error {
-		q := d.Find(h, Hook{ObjectID: id})
+		q := d.Find(&h, Hook{ObjectID: id})
 		if err := q.Error; err != nil {
 			return errors.Wrap(err, "failed to find labels")
 		}
@@ -209,7 +215,7 @@ func (r *cosmosRepo) addHost(h ...*Host) error {
 	return r.WithTransaction(func(d *gorm.DB) error {
 		q := d.Clauses(clause.OnConflict{
 			DoNothing: true,
-		}).Create(h)
+		}).Create(&h)
 
 		if err := q.Error; err != nil {
 			return errors.Wrap(err, "failed to create host(s)")
@@ -224,7 +230,7 @@ func (r *cosmosRepo) addHost(h ...*Host) error {
 
 func (r *cosmosRepo) addFingerprint(f ...*Fingerprint) error {
 	return r.WithTransaction(func(d *gorm.DB) error {
-		q := d.Create(f)
+		q := d.Create(&f)
 		if err := q.Error; err != nil {
 			return errors.Wrap(err, "failed to create fingerprint(s)")
 		}
@@ -234,7 +240,7 @@ func (r *cosmosRepo) addFingerprint(f ...*Fingerprint) error {
 
 func (r *cosmosRepo) addLabel(l ...*Label) error {
 	return r.WithTransaction(func(d *gorm.DB) error {
-		q := d.Create(l)
+		q := d.Create(&l)
 		if err := q.Error; err != nil {
 			return errors.Wrap(err, "failed to create label(s)")
 		}
@@ -249,7 +255,7 @@ func (r *cosmosRepo) addLabel(l ...*Label) error {
 
 func (r *cosmosRepo) addScan(s ...*Scan) error {
 	return r.WithTransaction(func(d *gorm.DB) error {
-		q := d.Create(s)
+		q := d.Create(&s)
 		if err := q.Error; err != nil {
 			return errors.Wrap(err, "failed to create scan(s)")
 		}
@@ -259,7 +265,7 @@ func (r *cosmosRepo) addScan(s ...*Scan) error {
 
 func (r *cosmosRepo) addSource(s ...*Source) error {
 	return r.WithTransaction(func(d *gorm.DB) error {
-		q := d.Create(s)
+		q := d.Create(&s)
 		if err := q.Error; err != nil {
 			return errors.Wrap(err, "failed to create source(s)")
 		}
@@ -267,9 +273,9 @@ func (r *cosmosRepo) addSource(s ...*Source) error {
 	})
 }
 
-func (r *cosmosRepo) find(m any, q any) error {
+func (r *cosmosRepo) find(m, q any, args ...any) error {
 	return r.WithTransaction(func(d *gorm.DB) error {
-		res := d.Where(m).Find(q)
+		res := d.Where(q, args...).Find(m)
 		if err := res.Error; err != nil {
 			return err
 		}
@@ -296,9 +302,12 @@ type signatureRepo struct {
 
 func (r *signatureRepo) addSignature(s ...*Signature) error {
 	return r.WithTransaction(func(d *gorm.DB) error {
-		q := d.Clauses(clause.OnConflict{
-			DoNothing: true,
-		}).Create(s)
+		q := d.
+			Omit(clause.Associations).
+			Clauses(clause.OnConflict{
+				DoNothing: true,
+			}).
+			Create(&s)
 
 		if err := q.Error; err != nil {
 			return errors.Wrap(err, "failed to create signature(s)")
@@ -311,7 +320,7 @@ func (r *signatureRepo) addModule(m ...*Module) error {
 	return r.WithTransaction(func(d *gorm.DB) error {
 		q := d.Clauses(clause.OnConflict{
 			DoNothing: true,
-		}).Create(m)
+		}).Create(&m)
 
 		if err := q.Error; err != nil {
 			return errors.Wrap(err, "failed to create module(s)")
@@ -385,9 +394,9 @@ func (r *signatureRepo) getRoots(id uint) ([]*Node, error) {
 	})
 }
 
-func (r *signatureRepo) find(m any, q any) error {
+func (r *signatureRepo) find(m, q any, args ...any) error {
 	return r.WithTransaction(func(d *gorm.DB) error {
-		res := d.Where(m).Find(q)
+		res := d.Where(q, args...).Find(m)
 		if err := res.Error; err != nil {
 			return err
 		}
@@ -412,17 +421,20 @@ func (r *signatureRepo) parseSignatureFile(fpath string) (*Signature, error) {
 		return nil, err
 	}
 
-	return &sig, nil
+	return sig, nil
 }
 
 func (r *signatureRepo) findFiles(t string, globs []string) ([]string, error) {
+	g := make([]string, len(globs))
+	copy(g, globs)
+
 	var fpath string
 	switch t {
 	case "signature":
 		fpath = r.conf.Signatures()
-		for i, g := range globs {
-			if !strings.HasPrefix(g, ".dice") {
-				globs[i] = g + ".dice"
+		for i, gl := range g {
+			if !strings.HasSuffix(gl, ".dice") {
+				g[i] = gl + ".dice"
 			}
 		}
 	case "module":
@@ -450,12 +462,12 @@ func (r *signatureRepo) findFiles(t string, globs []string) ([]string, error) {
 	}
 
 	var sPaths []string
-	for _, glob := range globs {
-		globSigs, err := withGlob(glob)
+	for _, glob := range g {
+		globF, err := withGlob(glob)
 		if err != nil {
 			return nil, err
 		}
-		sPaths = append(sPaths, globSigs...)
+		sPaths = append(sPaths, globF...)
 	}
 	return sPaths, nil
 }
@@ -509,9 +521,9 @@ func (r *projectRepo) addStudy(s ...*Study) (err error) {
 	panic("not implemented yet")
 }
 
-func (r *projectRepo) find(m any, q any) error {
+func (r *projectRepo) find(m, q any, args ...any) error {
 	return r.WithTransaction(func(d *gorm.DB) error {
-		res := d.Where(m).Find(q)
+		res := d.Where(q, args...).Find(m)
 		if err := res.Error; err != nil {
 			return err
 		}
@@ -595,7 +607,7 @@ func (r *repositoryRegistry) Signatures() *signatureRepo {
 	}
 
 	models := []any{&Signature{}, &Module{}, &Node{}}
-	repo := r.builder.setModels(models).setName("signatures").build()
+	repo := r.builder.setModels(models).setName("signatures.db").build()
 	r.signatures = &signatureRepo{
 		repo,
 		NewParser(),
@@ -608,7 +620,7 @@ func (r *repositoryRegistry) Projects() *projectRepo {
 	if r.projects != nil {
 		return r.projects
 	}
-	repo := r.builder.setModels([]any{&Project{}}).setName("projects").build()
+	repo := r.builder.setModels([]any{&Project{}}).setName("projects.db").build()
 	r.projects = &projectRepo{repo}
 	return r.projects
 }
@@ -620,7 +632,7 @@ func (r *repositoryRegistry) Cosmos() *cosmosRepo {
 
 	// cosmos goes into the current directory
 	// TODO: not sure about this. Cosmos should go to the workspace
-	b := newRepositoryBuilder(".", r.builder.workspace)
+	b := newRepositoryBuilder(r.conf.Project(), r.conf.Workspace())
 	repo := b.
 		setModels([]any{&Host{}, &Fingerprint{}, &Label{}, &Hook{}}).
 		setName("cosmos").

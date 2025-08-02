@@ -1,19 +1,41 @@
 package dice
 
 import (
+	"github.com/pkg/errors"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type Signature struct {
 	gorm.Model
 
 	// Name of the signature
-	Name string `gorm:"uniqueIndex"`
+	Name string `gorm:"uniqueIndex:name,sort:desc"`
 	// Component of signature. This defines the modules it contains
 	Component string
 	// Linked nodes in the signature
 	Nodes []*Node `gorm:"foreignKey:SignatureID;constraint:OnDelete:CASCADE"`
+}
+
+func (s *Signature) createNode(n *Node, tx *gorm.DB) error {
+	for _, nC := range n.Children {
+		if err := s.createNode(nC, tx); err != nil {
+			return errors.Wrapf(err, "failed to create node '%s' child", n.name)
+		}
+	}
+
+	if n.ID == 0 && n.SignatureID == 0 {
+		n.SignatureID = s.ID
+		q := tx.Clauses(clause.OnConflict{
+			DoNothing: true,
+		}).Create(n)
+
+		if err := q.Error; err != nil {
+			return errors.Wrap(err, "failed to create node")
+		}
+	}
+	return nil
 }
 
 type NodeType string
@@ -47,6 +69,35 @@ type Node struct {
 	name string
 }
 
+func (n *Node) AfterCreate(tx *gorm.DB) error {
+	var q *gorm.DB
+	switch n.Type {
+	case MODULE_NODE:
+		q = tx.Table("modules")
+	case SIGNATURE_NODE:
+		q = tx.Table("signatures")
+	default:
+		return errors.Errorf("unknown module type '%s'", string(n.Type))
+	}
+
+	result := map[string]interface{}{}
+	q = q.Where("name = ?", n.name).Take(&result)
+	if err := q.Error; err != nil {
+		return errors.Wrapf(err, "failed to find node %s '%s'", string(n.Type), n.name)
+	}
+
+	id, ok := result["id"]
+	if !ok {
+		return errors.Errorf("failed to get module %s ID", string(n.Type))
+	}
+
+	n.ObjectID = uint(id.(int64))
+	if err := tx.Save(n).Error; err != nil {
+		return errors.Wrapf(err, "failed to save node %s", n.name)
+	}
+	return nil
+}
+
 type ModuleType string
 
 const (
@@ -66,9 +117,7 @@ type Module struct {
 	// Path to module
 	Location string
 	// Hash of the plugin
-	Hash string
-	// Tags
-	Tags       []string
+	Hash       string
 	Properties datatypes.JSON
 }
 
