@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func projectCommands(conf dice.Configuration) []*cobra.Command {
+func projectCommands(conf *dice.Configuration) []*cobra.Command {
 	init := &cobra.Command{
 		Use:     "init [project_name]",
 		Short:   "Initialize a DICE project",
@@ -46,7 +46,7 @@ func projectCommands(conf dice.Configuration) []*cobra.Command {
 				proj.Name = filepath.Base(p)
 			}
 
-			ad := dice.MakeAdapters(nil, &conf)
+			ad := dice.MakeAdapters(nil, conf)
 			if err := ad.Projects().AddProject(proj); err != nil {
 				return err
 			}
@@ -60,7 +60,7 @@ func projectCommands(conf dice.Configuration) []*cobra.Command {
 	projs := &cobra.Command{
 		Use: "projects",
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			ad := dice.MakeAdapters(nil, &conf)
+			ad := dice.MakeAdapters(nil, conf)
 			pAd = ad.Projects()
 		},
 	}

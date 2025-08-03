@@ -2,7 +2,9 @@ package dice
 
 import (
 	"encoding/json"
+	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/dice/shared"
 	"github.com/hashicorp/go-plugin"
@@ -56,4 +58,31 @@ func LoadModule(name string, fpath string) (shared.Module, error) {
 
 	module := raw.(shared.Module)
 	return module, nil
+}
+
+// Make a project. Typically followed by InitProject()
+func MakeProject(p string, conf *Configuration) (*Project, error) {
+	switch p {
+	// no project
+	case "-":
+		return &Project{Name: "-"}, nil
+	// current directory
+	case ".", "":
+		// get current directory project
+		dir, err := os.Getwd()
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get current directory")
+		}
+
+		return &Project{
+			Name: filepath.Dir(dir),
+			Path: dir,
+		}, nil
+	// another location
+	default:
+		return &Project{
+			Name: filepath.Dir(p),
+			Path: p,
+		}, nil
+	}
 }

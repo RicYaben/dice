@@ -52,23 +52,14 @@ type lazyLoader struct {
 	emitter  dice.Emitter
 }
 
-func newLazyEngineLoader(conf dice.Configuration) *lazyLoader {
-	return &lazyLoader{conf: &conf}
+func newLazyEngineLoader(conf *dice.Configuration) *lazyLoader {
+	return &lazyLoader{conf: conf}
 }
 
 func (l *lazyLoader) preRunE(w WorkspaceFlags, e EngineFlags, c ComposerFlags) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		em := dice.NewEmitter()
 		ad := dice.MakeAdapters(em.Emit, l.conf)
-
-		// Load the project configuration
-		pAd := ad.Projects()
-
-		var proj *dice.Project
-		if err := pAd.Find(proj, dice.Project{}); err != nil {
-			return errors.Wrap(err, "failed to load project")
-		}
-		ad = ad.SetConfig(l.conf.WithProject(proj))
 
 		// Create components with the named modules and signatures
 		comp := dice.NewComposer(ad.Composer())
@@ -150,7 +141,7 @@ func (l *lazyLoader) makeCommand(e EngineFlags) *cobra.Command {
 	return cmd
 }
 
-func engineCommands(conf dice.Configuration) []*cobra.Command {
+func engineCommands(conf *dice.Configuration) []*cobra.Command {
 	lazy := newLazyEngineLoader(conf)
 	return []*cobra.Command{
 		scanCommand(lazy),

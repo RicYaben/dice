@@ -2,6 +2,7 @@ package dice
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/spf13/afero"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -91,36 +93,46 @@ func (r *sourceRepo) addSource(s ...*Source) error {
 // Locates source files inside a scan by the name of the source
 func (r *sourceRepo) findSourceFiles(globs, ext []string) ([]*Source, error) {
 	// current workspace
-	fpath := r.conf.Workspace()
+	wk := r.conf.WorkspaceFs()
 
 	var srcs []*Source
 	// globs are just fine. It takes some time to iterate through all the
 	// patterns, but it adds flexibility
 	withGlob := func(glob string) ([]*Source, error) {
-		matches, err := filepath.Glob(filepath.Join(fpath, glob))
-		if err != nil {
-			return nil, errors.Wrap(err, "invalid glob pattern")
-		}
 
 		var gSrcs []*Source
-		for _, match := range matches {
-			info, err := os.Stat(match)
-			if err != nil || info.IsDir() {
-				continue // we cannot stat this, or is a dir
+		err := afero.Walk(wk, ".", func(path string, info fs.FileInfo, err error) error {
+			if err != nil {
+				return err
 			}
 
-			format := filepath.Ext(match)
+			match, err := filepath.Match(glob, path)
+			if err != nil {
+				return err
+			}
+
+			if !match {
+				return nil
+			}
+
+			format := filepath.Ext(path)
 			if !slices.Contains(ext, format) {
-				continue
+				return nil
 			}
 
 			gSrcs = append(gSrcs, &Source{
 				Name:     info.Name(),
-				Location: match,
+				Location: path,
 				Type:     SourceFile,
 				Format:   format,
 			})
+			return nil
+		})
+
+		if err != nil {
+			return nil, err
 		}
+
 		return gSrcs, nil
 	}
 
@@ -428,35 +440,38 @@ func (r *signatureRepo) findFiles(t string, globs []string) ([]string, error) {
 	g := make([]string, len(globs))
 	copy(g, globs)
 
-	var fpath string
+	var fs afero.Fs
 	switch t {
 	case "signature":
-		fpath = r.conf.Signatures()
+		fs = r.conf.SignaturesFs()
 		for i, gl := range g {
 			if !strings.HasSuffix(gl, ".dice") {
 				g[i] = gl + ".dice"
 			}
 		}
 	case "module":
-		fpath = r.conf.Modules()
+		fs = r.conf.ModulesFs()
 	default:
 		return nil, errors.Errorf("unable to find DICE-related files of type %s", t)
 	}
 
 	withGlob := func(glob string) ([]string, error) {
-		matches, err := filepath.Glob(filepath.Join(fpath, glob))
-		if err != nil {
-			return nil, errors.Wrap(err, "invalid glob pattern")
-		}
-
 		var gPaths []string
-		for _, match := range matches {
-			info, err := os.Stat(match)
-			if err != nil || info.IsDir() {
-				continue // we cannot stat this, or is a dir
+		err := afero.Walk(fs, ".", func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			match, err := filepath.Match(glob, path)
+			if err != nil || !match || info.IsDir() {
+				return err
 			}
 
-			gPaths = append(gPaths, match)
+			gPaths = append(gPaths, path)
+			return nil
+		})
+
+		if err != nil {
+			return nil, err
 		}
 		return gPaths, nil
 	}
@@ -476,38 +491,8 @@ type projectRepo struct {
 	Repository
 }
 
-// Add projects to the database
-// If successfully added, it creates DICE project files
-// in the project location
-// NOTE: projects have unique name-location pairs!
-func (r *projectRepo) remove(proj ...*Project) (err error) {
-	for _, p := range proj {
-		if rerr := os.RemoveAll(path.Join(p.Path, ".dice")); err != nil {
-			err = errors.Wrap(rerr, "failed to clear project")
-		}
-	}
-	return
-}
-
+// Add a new project to the database and initialize it
 func (r *projectRepo) addProject(proj ...*Project) (err error) {
-	defer func() {
-		if err != nil {
-			r.remove(proj...)
-		}
-	}()
-
-	for _, p := range proj {
-		f, err := os.Create(path.Join(p.Path, ".dice"))
-		if err != nil {
-			return err
-		}
-
-		// Store the settings. Noramlly empty on creation
-		if _, err := f.Write(p.Settings); err != nil {
-			return err
-		}
-	}
-
 	return r.WithTransaction(func(conn *gorm.DB) error {
 		q := conn.Create(proj)
 		if err := q.Error; err != nil {
@@ -532,17 +517,20 @@ func (r *projectRepo) find(m, q any, args ...any) error {
 }
 
 type repositoryBuilder struct {
-	home      string
-	workspace string
-	location  string
-	config    *gorm.Config
-	models    []any
+	dbDir        string
+	workspaceDir string
+	location     string
+	config       *gorm.Config
+	models       []any
 }
 
-func newRepositoryBuilder(home, workspace string) *repositoryBuilder {
+// Creates a repository builder.
+// The home string indicates where databases are located
+// The workspace indicates where files will be created
+func newRepositoryBuilder(dbDir, wkDir string) *repositoryBuilder {
 	return &repositoryBuilder{
-		home:      home,
-		workspace: workspace,
+		dbDir:        dbDir,
+		workspaceDir: wkDir,
 		config: &gorm.Config{
 			SkipDefaultTransaction: true,
 			PrepareStmt:            true,
@@ -556,11 +544,11 @@ func (b *repositoryBuilder) setLocation(name string) *repositoryBuilder {
 }
 
 func (b *repositoryBuilder) setName(n string) *repositoryBuilder {
-	switch b.home {
+	switch b.dbDir {
 	case "-":
 		return b.setLocation(string(INMEMORY_DATABASE))
 	default:
-		return b.setLocation(path.Join(b.home, n))
+		return b.setLocation(path.Join(b.dbDir, n))
 	}
 }
 
@@ -597,7 +585,7 @@ type repositoryRegistry struct {
 func newRepositoryFactory(conf *Configuration) *repositoryRegistry {
 	return &repositoryRegistry{
 		conf:    conf,
-		builder: newRepositoryBuilder(conf.Home(), conf.Workspace()),
+		builder: newRepositoryBuilder(conf.Databases(), conf.Workspace()),
 	}
 }
 
@@ -632,10 +620,10 @@ func (r *repositoryRegistry) Cosmos() *cosmosRepo {
 
 	// cosmos goes into the current directory
 	// TODO: not sure about this. Cosmos should go to the workspace
-	b := newRepositoryBuilder(r.conf.Project(), r.conf.Workspace())
+	b := newRepositoryBuilder(r.conf.Workspace(), r.conf.Workspace())
 	repo := b.
 		setModels([]any{&Host{}, &Fingerprint{}, &Label{}, &Hook{}}).
-		setName("cosmos").
+		setName("cosmos.db").
 		build()
 
 	cache := expirable.NewLRU[uint, *Host](1e3, nil, 5*time.Minute)

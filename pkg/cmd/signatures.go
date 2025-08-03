@@ -11,7 +11,7 @@ import (
 
 type operatorCmds struct {
 	// DICE configuration (paths)
-	conf dice.Configuration
+	conf *dice.Configuration
 	// Adapter factory
 	adapters dice.Adapters
 	// name of the command
@@ -58,7 +58,7 @@ func (o *operatorCmds) makeCommand() *cobra.Command {
 		GroupID: o.name,
 		Use:     o.name,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			o.adapters = dice.MakeAdapters(nil, &o.conf)
+			o.adapters = dice.MakeAdapters(nil, o.conf)
 		},
 	}
 
@@ -70,7 +70,7 @@ func (o *operatorCmds) makeCommand() *cobra.Command {
 	return cmd
 }
 
-func signatureCommand(conf dice.Configuration) *cobra.Command {
+func signatureCommand(conf *dice.Configuration) *cobra.Command {
 	o := &operatorCmds{name: "signature", conf: conf}
 
 	// Takes a number of glob-like names and adds them to the db
@@ -96,7 +96,7 @@ func signatureCommand(conf dice.Configuration) *cobra.Command {
 	return o.makeCommand()
 }
 
-func moduleCommand(conf dice.Configuration) *cobra.Command {
+func moduleCommand(conf *dice.Configuration) *cobra.Command {
 	o := &operatorCmds{name: "module", conf: conf}
 
 	// register one or more modules into the database (by globs)

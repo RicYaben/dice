@@ -11,10 +11,11 @@ const unset = "-"
 type Flags struct {
 	Paths dice.StandardPaths
 	//Config dice.ConfigFlags
+	Config string
 }
 
 func Run() error {
-	var conf dice.Configuration
+	var conf *dice.Configuration
 	var f Flags
 
 	com := &cobra.Command{
@@ -27,12 +28,17 @@ func Run() error {
 			// 1. bind the paths. Overrides defaults.
 			dice.BindStandardPaths(&f.Paths)
 			// 2. load and validate the configuration
-			return dice.LoadConfiguration(f.Paths, &conf)
+			c, err := dice.LoadSettings(f.Config, &f.Paths)
+			conf = c
+			return err
 		},
 	}
 
 	// This set of flags propagates
 	fl := com.PersistentFlags()
+
+	confFlags := pflag.NewFlagSet("Configuration", pflag.ExitOnError)
+	confFlags.StringVar(&f.Config, "config", "", "Path to configuration file")
 
 	stdpaths := &f.Paths
 	pathFlags := pflag.NewFlagSet("Standard Paths", pflag.ExitOnError)

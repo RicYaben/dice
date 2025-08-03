@@ -5,6 +5,7 @@ package dice
 
 import (
 	"os"
+	"path"
 	"slices"
 	"strings"
 
@@ -118,6 +119,7 @@ type ProjectAdapter interface {
 	Find(m, q any, args ...any) error
 	AddProject(...*Project) error
 	AddStudy(...*Study) error
+	InitProject(*Project) error
 }
 
 // A common intreface for most adapters
@@ -506,6 +508,43 @@ func (a *projectAdapter) AddStudy(s ...*Study) error {
 
 func (a *projectAdapter) Find(m, q any, args ...any) error {
 	return a.repo.find(m, q, args...)
+}
+
+func (a *projectAdapter) InitProject(p *Project) (err error) {
+	if p.Name == "-" {
+		return nil
+	}
+
+	// check if the project already exists in the database
+	if err := a.Find(p, "name = ?", p.Name); err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.Wrapf(err, "failed to lookup project '%s'", p.Name)
+		}
+	}
+
+	if p.ID > 0 {
+		return errors.Errorf("project already exists: %v", p)
+	}
+
+	defer func() {
+		if err != nil {
+			os.RemoveAll(p.Path)
+		}
+	}()
+
+	if err := os.MkdirAll(p.Path, 0755); err != nil {
+		return errors.Wrap(err, "failed to create project dir")
+	}
+
+	if err := os.WriteFile(path.Join(p.Path, ".dice"), p.Settings, 0644); err != nil {
+		return errors.Wrapf(err, "failed to save project settings")
+	}
+
+	if err := a.AddProject(p); err != nil {
+		return errors.Wrap(err, "failed to add project")
+	}
+
+	return nil
 }
 
 // Adapters factory

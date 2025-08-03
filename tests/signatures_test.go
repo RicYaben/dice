@@ -11,17 +11,6 @@ type sigTester struct {
 	modules    []string
 }
 
-func testConfig() (*dice.Configuration, error) {
-	paths := dice.PWDStandardPaths()
-	dice.BindStandardPaths(&paths)
-
-	var conf dice.Configuration
-	if err := dice.LoadConfiguration(paths, &conf); err != nil {
-		return nil, err
-	}
-	return &conf, nil
-}
-
 func (t *sigTester) runTest(test *testing.T) {
 	conf, err := testConfig()
 	if err != nil {
@@ -29,7 +18,6 @@ func (t *sigTester) runTest(test *testing.T) {
 	}
 
 	ad := dice.MakeAdapters(nil, conf).Signatures()
-	ad.ChangeLocation(string(dice.INMEMORY_DATABASE))
 
 	// Add all missing
 	if _, err := ad.AddMissingModules(t.modules...); err != nil {
