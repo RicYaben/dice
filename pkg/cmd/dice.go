@@ -37,9 +37,6 @@ func Run() error {
 	// This set of flags propagates
 	fl := com.PersistentFlags()
 
-	confFlags := pflag.NewFlagSet("Configuration", pflag.ExitOnError)
-	confFlags.StringVar(&f.Config, "config", "", "Path to configuration file")
-
 	stdpaths := &f.Paths
 	pathFlags := pflag.NewFlagSet("Standard Paths", pflag.ExitOnError)
 	pathFlags.StringVar(&stdpaths.DICE_APPNAME, "stdpath.app", unset, "App name")
@@ -48,11 +45,11 @@ func Run() error {
 	pathFlags.StringVar(&stdpaths.DATA_HOME, "stdpath.data", unset, "Data directory")
 	fl.AddFlagSet(pathFlags)
 
-	// Config flags -- not used atm
-	// cfg := &f.Config
-	// cfgFlags := pflag.NewFlagSet("Configuration", pflag.ExitOnError)
+	// Config flags
+	cfgFlags := pflag.NewFlagSet("Configuration", pflag.ExitOnError)
+	cfgFlags.StringVar(&f.Config, "config", "", "Path to configuration file")
 	// cfgFlags.StringVarP(&cfg.Profile, "profile", "u", string(dice.NO_PROFILE), "Initialize a DICE profile. ")
-	// fl.AddFlagSet(cfgFlags)
+	fl.AddFlagSet(cfgFlags)
 
 	com.AddCommand(engineCommands(conf)...)
 	com.AddCommand(projectCommands(conf)...)
