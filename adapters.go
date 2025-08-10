@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/spf13/afero"
 	"gorm.io/gorm"
 )
 
@@ -496,6 +497,7 @@ func (a *signatureAdapter) ChangeLocation(l string) {
 
 type projectAdapter struct {
 	repo *projectRepo
+	fs   afero.Fs
 }
 
 func (a *projectAdapter) AddProject(p ...*Project) error {
@@ -532,11 +534,12 @@ func (a *projectAdapter) InitProject(p *Project) (err error) {
 		}
 	}()
 
-	if err := os.MkdirAll(p.Path, 0755); err != nil {
+	fs := a.fs
+	if err := fs.MkdirAll(p.Path, 0755); err != nil {
 		return errors.Wrap(err, "failed to create project dir")
 	}
 
-	if err := os.WriteFile(path.Join(p.Path, ".dice"), p.Settings, 0644); err != nil {
+	if err := afero.WriteFile(fs, path.Join(p.Path, ".dice"), p.Settings, 0644); err != nil {
 		return errors.Wrapf(err, "failed to save project settings")
 	}
 
@@ -552,19 +555,16 @@ type adapterFactory struct {
 	eventBus
 	registry *registry
 	repos    *repositoryRegistry
+	conf     Settings
 }
 
-func MakeAdapters(bus eventBus, conf *Configuration) *adapterFactory {
+func MakeAdapters(bus eventBus, s Settings) *adapterFactory {
 	return &adapterFactory{
 		bus,
 		&registry{},
-		newRepositoryFactory(conf),
+		newRepositoryFactory(s),
+		s,
 	}
-}
-
-func (f *adapterFactory) SetConfig(conf *Configuration) *adapterFactory {
-	f.repos.conf = conf
-	return f
 }
 
 func (f *adapterFactory) Cosmos() CosmosAdapter {
@@ -599,6 +599,7 @@ func (f *adapterFactory) Signatures() SignatureAdapter {
 func (f *adapterFactory) Projects() ProjectAdapter {
 	return &projectAdapter{
 		repo: f.repos.Projects(),
+		fs:   f.conf.RootFs(),
 	}
 }
 

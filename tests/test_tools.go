@@ -10,11 +10,5 @@ func testConfig() (*dice.Configuration, error) {
 	// So when we create databases and stuff, is inside that temporary
 	// directory that clears on exit
 	fs := afero.NewMemMapFs()
-
-	conf, err := dice.LoadSettings("-", dice.DefaultPaths())
-	if err != nil {
-		return nil, err
-	}
-	conf.SetFS(fs)
-	return conf, nil
+	return dice.LoadSettings("-", dice.DefaultPaths(), fs)
 }

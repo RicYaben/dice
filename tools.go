@@ -75,13 +75,13 @@ func MakeProject(p string, conf *Configuration) (*Project, error) {
 		}
 
 		return &Project{
-			Name: filepath.Dir(dir),
+			Name: filepath.Base(dir),
 			Path: dir,
 		}, nil
 	// another location
 	default:
 		return &Project{
-			Name: filepath.Dir(p),
+			Name: filepath.Base(p),
 			Path: p,
 		}, nil
 	}

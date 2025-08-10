@@ -58,7 +58,7 @@ func (r *repository) connect() (*gorm.DB, error) {
 
 	db, err := gorm.Open(sqlite.Open(r.location), r.config)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to open database connection")
+		return nil, errors.Wrapf(err, "failed to open database connection '%s'", r.location)
 	}
 
 	db = db.Exec("PRAGMA foreign_keys = ON")
@@ -309,7 +309,7 @@ func (r *cosmosRepo) query(m any) ([]*Host, error) {
 type signatureRepo struct {
 	Repository
 	parser Parser
-	conf   *Configuration
+	conf   Settings
 }
 
 func (r *signatureRepo) addSignature(s ...*Signature) error {
@@ -517,20 +517,18 @@ func (r *projectRepo) find(m, q any, args ...any) error {
 }
 
 type repositoryBuilder struct {
-	dbDir        string
-	workspaceDir string
-	location     string
-	config       *gorm.Config
-	models       []any
+	dbs      string
+	location string
+	config   *gorm.Config
+	models   []any
 }
 
 // Creates a repository builder.
 // The home string indicates where databases are located
 // The workspace indicates where files will be created
-func newRepositoryBuilder(dbDir, wkDir string) *repositoryBuilder {
+func newRepositoryBuilder(dbs string) *repositoryBuilder {
 	return &repositoryBuilder{
-		dbDir:        dbDir,
-		workspaceDir: wkDir,
+		dbs: dbs,
 		config: &gorm.Config{
 			SkipDefaultTransaction: true,
 			PrepareStmt:            true,
@@ -538,17 +536,21 @@ func newRepositoryBuilder(dbDir, wkDir string) *repositoryBuilder {
 	}
 }
 
-func (b *repositoryBuilder) setLocation(name string) *repositoryBuilder {
-	b.location = name
+func (b *repositoryBuilder) setLocation(fpath string) *repositoryBuilder {
+	b.location = fpath
 	return b
 }
 
 func (b *repositoryBuilder) setName(n string) *repositoryBuilder {
-	switch b.dbDir {
-	case "-":
+	if b.dbs == "-" {
+		n = "-"
+	}
+
+	switch n {
+	case "-", "":
 		return b.setLocation(string(INMEMORY_DATABASE))
 	default:
-		return b.setLocation(path.Join(b.dbDir, n))
+		return b.setLocation(path.Join(b.dbs, n))
 	}
 }
 
@@ -573,7 +575,7 @@ func (b *repositoryBuilder) build() *repository {
 }
 
 type repositoryRegistry struct {
-	conf    *Configuration
+	conf    Settings
 	builder *repositoryBuilder
 
 	signatures *signatureRepo
@@ -582,10 +584,10 @@ type repositoryRegistry struct {
 	sources    *sourceRepo
 }
 
-func newRepositoryFactory(conf *Configuration) *repositoryRegistry {
+func newRepositoryFactory(conf Settings) *repositoryRegistry {
 	return &repositoryRegistry{
 		conf:    conf,
-		builder: newRepositoryBuilder(conf.Databases(), conf.Workspace()),
+		builder: newRepositoryBuilder(conf.Databases()),
 	}
 }
 
@@ -618,9 +620,7 @@ func (r *repositoryRegistry) Cosmos() *cosmosRepo {
 		return r.cosmos
 	}
 
-	// cosmos goes into the current directory
-	// TODO: not sure about this. Cosmos should go to the workspace
-	b := newRepositoryBuilder(r.conf.Workspace(), r.conf.Workspace())
+	b := newRepositoryBuilder(r.conf.Workspace())
 	repo := b.
 		setModels([]any{&Host{}, &Fingerprint{}, &Label{}, &Hook{}}).
 		setName("cosmos.db").
@@ -633,7 +633,7 @@ func (r *repositoryRegistry) Cosmos() *cosmosRepo {
 
 func (r *repositoryRegistry) Sources() *sourceRepo {
 	// Sources goes into memory
-	b := newRepositoryBuilder("-", "-")
+	b := newRepositoryBuilder("-")
 	repo := b.setModels([]any{&Source{}}).build()
 	r.sources = &sourceRepo{Repository: repo}
 	return r.sources

@@ -22,12 +22,14 @@ func (t *projTester) runTest(test *testing.T) {
 	for _, p := range t.projects {
 		proj, err := dice.MakeProject(p, conf)
 		if err != nil {
-			test.Fatalf("failed to make project %s: %v", p, err)
+			test.Fatalf("failed to make project '%s': %v", p, err)
 		}
 
 		if err := ad.InitProject(proj); err != nil {
-			test.Fatalf("failed to initialize project %v: %v", proj, err)
+			test.Fatalf("failed to initialize project '%s': %v", p, err)
 		}
+
+		test.Logf("project %s initialized: %v", p, proj)
 	}
 }
 

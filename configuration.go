@@ -17,7 +17,7 @@ import (
 // an FS based on the paths in the config!
 type Settings interface {
 	// Base path storing DICE documents. (read-only)
-	Home() afero.Fs
+	RootFs() afero.Fs
 	// Directory storing signatures (read-only)
 	SignaturesFs() afero.Fs
 	// Directory storing Modules (read-only)
@@ -80,15 +80,6 @@ func (s *StandardPaths) Overrides(stdpaths *StandardPaths) *StandardPaths {
 
 func DefaultPaths() *StandardPaths {
 	return BindStandardPaths(&StandardPaths{})
-}
-
-func (s StandardPaths) init() error {
-	for _, p := range []string{s.CONFIG_HOME, s.STATE_HOME, s.DATA_HOME} {
-		if err := os.MkdirAll(p, 0700); err != nil {
-			return errors.Wrapf(err, "failed to create standard path: %s", p)
-		}
-	}
-	return nil
 }
 
 type stdpathsBuilder struct {
@@ -173,30 +164,24 @@ type Configuration struct {
 	study *Study
 }
 
-func newConfiguration() *Configuration {
-	return &Configuration{
-		fs: afero.NewOsFs(),
-	}
-}
-
 // Returns the location where we store databases, modules, and signatures
-func (c *Configuration) Home() afero.Fs {
-	return afero.NewBasePathFs(c.fs, c.Paths.DATA_HOME)
+func (c *Configuration) RootFs() afero.Fs {
+	return afero.NewBasePathFs(c.fs, c.Root())
 }
 
 func (c *Configuration) SignaturesFs() afero.Fs {
-	return afero.NewBasePathFs(c.Home(), "signatures")
+	return afero.NewBasePathFs(c.RootFs(), "signatures")
 }
 
 func (c *Configuration) ModulesFs() afero.Fs {
-	return afero.NewBasePathFs(c.Home(), "modules")
+	return afero.NewBasePathFs(c.RootFs(), "modules")
 }
 
 func (c *Configuration) ProjectFs() afero.Fs {
 	if c.Project != nil {
 		return afero.NewBasePathFs(c.fs, c.Project.Path)
 	}
-	return c.Home()
+	return c.RootFs()
 }
 
 // Returns the location where the current run will output data to
@@ -208,15 +193,35 @@ func (c *Configuration) WorkspaceFs() afero.Fs {
 	return c.ProjectFs()
 }
 
+func (c *Configuration) DatabasesFs() afero.Fs {
+	return afero.NewBasePathFs(c.RootFs(), "databases")
+}
+
+func (c *Configuration) Root() string {
+	return c.Paths.DATA_HOME
+}
+
 func (c *Configuration) Workspace() string {
 	if c.study != nil {
 		return c.study.Path
 	}
-	return c.Paths.DATA_HOME
+	return c.Root()
 }
 
 func (c *Configuration) Databases() string {
-	return filepath.Join(c.Paths.DATA_HOME, "databases")
+	// NOTE: This is only useful for testing!
+	// Since gorm can only load gorm.Dialect stuff, we cannot pass
+	// a path to it. Best alternative is to create a temporary directory
+	// and delete it afterwards. BTW, on windows this behavior is different,
+	// so we cannot clear out the folder
+	if _, ok := c.fs.(*afero.MemMapFs); ok {
+		dir, err := os.MkdirTemp(c.Paths.STATE_HOME, "databases-*")
+		if err != nil {
+			panic(err)
+		}
+		return dir
+	}
+	return path.Join(c.Root(), "databases")
 }
 
 func (c *Configuration) SetFS(fs afero.Fs) *Configuration {
@@ -325,7 +330,16 @@ func pwdConf() (*Configuration, error) {
 // for related files (e.g., modules, signatures, databases, etc.).
 // If the path is another location, DICE will strictly look for a config file
 // in that location and load it, returning an error if fails.
-func LoadSettings(p string, stdpaths *StandardPaths) (*Configuration, error) {
+func LoadSettings(p string, stdpaths *StandardPaths, fs afero.Fs) (*Configuration, error) {
+	if fs == nil {
+		fs = afero.NewOsFs()
+	}
+
+	var (
+		conf *Configuration
+		err  error
+	)
+
 	switch p {
 	// Default mode. No config given, check for the default config file path
 	// If no config is there, return default settings
@@ -333,41 +347,40 @@ func LoadSettings(p string, stdpaths *StandardPaths) (*Configuration, error) {
 		// This config is the one of the project
 		// TODO: maybe improve this so we can understand when we are in a project
 		// before this happens, that way we can also load the project
-		conf, lErr := projConf(stdpaths)
-		if lErr != nil {
-			if errors.Is(lErr, ErrNotInDICEProject) {
+		conf, err = projConf(stdpaths)
+		if err != nil {
+			if errors.Is(err, ErrNotInDICEProject) {
 				goto CONFILE
 			}
-			return nil, errors.Wrap(lErr, "failed to load project settings")
+			return nil, errors.Wrap(err, "failed to load project settings")
 		}
-		return conf, nil
-
+		break
 	CONFILE:
-		conf, fErr := fpathConf(filepath.Join(stdpaths.CONFIG_HOME, "conf.json"), stdpaths)
-		if fErr != nil {
-			if errors.Is(fErr, os.ErrNotExist) {
+		conf, err = fpathConf(filepath.Join(stdpaths.CONFIG_HOME, "conf.json"), stdpaths)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
 				goto CONFBASE
 			}
-			return nil, errors.Wrap(fErr, "failed to load settings from config directory")
+			return nil, errors.Wrap(err, "failed to load settings from config directory")
 		}
-		return conf, nil
-
+		break
 	CONFBASE:
-		return baseConf(stdpaths), nil
+		conf = baseConf(stdpaths)
 	// Without settings, everything in the current path
 	case "-":
-		conf, err := pwdConf()
+		conf, err = pwdConf()
 		if err != nil {
 			return nil, errors.Wrap(err, "failed load without settings")
 		}
-		return conf, nil
 	// Another path, check if there is a config file there
 	// If there isn't, return an error
 	default:
-		conf, err := fpathConf(p, stdpaths)
+		conf, err = fpathConf(p, stdpaths)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to load settings from location")
 		}
-		return conf, nil
 	}
+
+	conf.fs = fs
+	return conf, nil
 }

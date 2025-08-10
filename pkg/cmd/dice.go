@@ -25,10 +25,10 @@ func Run() error {
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// Initial checks. Checks environment variables and standard paths
 
-			// 1. bind the paths. Overrides defaults.
+			// bind the paths. Overrides defaults.
 			dice.BindStandardPaths(&f.Paths)
-			// 2. load and validate the configuration
-			c, err := dice.LoadSettings(f.Config, &f.Paths)
+			// load and validate the configuration
+			c, err := dice.LoadSettings(f.Config, &f.Paths, nil)
 			conf = c
 			return err
 		},

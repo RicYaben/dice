@@ -236,13 +236,14 @@ type Project struct {
 
 	Settings datatypes.JSON
 
-	Studies []*Study
+	Studies []*Study `gorm:"foreignKey:ProjectID;constraint:OnDelete:CASCADE"`
 }
 
 type Study struct {
 	gorm.Model
-	Name string
-	Path string
+	Name      string
+	ProjectID uint
+	Path      string
 }
 
 type EventType uint8
