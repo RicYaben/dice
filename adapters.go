@@ -343,18 +343,14 @@ func (a *signatureAdapter) GetModule(id uint) (*Module, error) {
 }
 
 func (a *signatureAdapter) AddMissingSignatures(g ...string) ([]*Signature, error) {
-	fpaths, err := a.repo.findFiles("signature", g)
+	files, err := a.repo.findFiles("signature", g)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to find files")
 	}
 
 	var names []string
-	for _, fpath := range fpaths {
-		info, err := os.Stat(fpath)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to get signature file stats")
-		}
-		name := strings.TrimSuffix(info.Name(), ".dice")
+	for _, f := range files {
+		name := strings.TrimSuffix(f.Info.Name(), ".dice")
 		names = append(names, name)
 	}
 
@@ -375,7 +371,7 @@ func (a *signatureAdapter) AddMissingSignatures(g ...string) ([]*Signature, erro
 			continue
 		}
 
-		sig, err := a.repo.parseSignatureFile(fpaths[i])
+		sig, err := a.repo.parseSignatureFile(files[i].Path)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to parse signature")
 		}
@@ -408,18 +404,14 @@ func (a *signatureAdapter) AddMissingSignatures(g ...string) ([]*Signature, erro
 }
 
 func (a *signatureAdapter) AddMissingModules(g ...string) ([]*Module, error) {
-	fpaths, err := a.repo.findFiles("module", g)
+	files, err := a.repo.findFiles("module", g)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to find files")
 	}
 
 	var names []string
-	for _, fpath := range fpaths {
-		info, err := os.Stat(fpath)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to get module file stats")
-		}
-		names = append(names, info.Name())
+	for _, f := range files {
+		names = append(names, f.Info.Name())
 	}
 
 	mods := []*Module{}
@@ -440,7 +432,7 @@ func (a *signatureAdapter) AddMissingModules(g ...string) ([]*Module, error) {
 
 		m := Module{
 			Name:     n,
-			Location: fpaths[i],
+			Location: files[i].Path,
 		}
 
 		mod, err := LoadModule(m.Name, m.Location)

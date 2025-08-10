@@ -436,28 +436,42 @@ func (r *signatureRepo) parseSignatureFile(fpath string) (*Signature, error) {
 	return sig, nil
 }
 
-func (r *signatureRepo) findFiles(t string, globs []string) ([]string, error) {
+type fileInfo struct {
+	Path string
+	Info os.FileInfo
+}
+
+func (r *signatureRepo) findFiles(t string, globs []string) ([]fileInfo, error) {
 	g := make([]string, len(globs))
 	copy(g, globs)
 
-	var fs afero.Fs
+	var (
+		fs  afero.Fs = r.conf.RootFs()
+		dir string   = "."
+	)
+
 	switch t {
 	case "signature":
-		fs = r.conf.SignaturesFs()
+		dir = r.conf.Signatures()
 		for i, gl := range g {
 			if !strings.HasSuffix(gl, ".dice") {
 				g[i] = gl + ".dice"
 			}
 		}
 	case "module":
-		fs = r.conf.ModulesFs()
+		dir = r.conf.Modules()
 	default:
 		return nil, errors.Errorf("unable to find DICE-related files of type %s", t)
 	}
 
-	withGlob := func(glob string) ([]string, error) {
-		var gPaths []string
-		err := afero.Walk(fs, ".", func(path string, info os.FileInfo, err error) error {
+	withGlob := func(glob string) ([]fileInfo, error) {
+		var files []fileInfo
+		if !strings.HasPrefix(glob, dir) {
+			glob = path.Join(dir, glob)
+		}
+
+		// The fs is jailed, so start from the base
+		err := afero.Walk(fs, dir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
@@ -466,25 +480,25 @@ func (r *signatureRepo) findFiles(t string, globs []string) ([]string, error) {
 				return err
 			}
 
-			gPaths = append(gPaths, path)
+			files = append(files, fileInfo{path, info})
 			return nil
 		})
 
 		if err != nil {
 			return nil, err
 		}
-		return gPaths, nil
+		return files, nil
 	}
 
-	var sPaths []string
+	var files []fileInfo
 	for _, glob := range g {
 		globF, err := withGlob(glob)
 		if err != nil {
 			return nil, err
 		}
-		sPaths = append(sPaths, globF...)
+		files = append(files, globF...)
 	}
-	return sPaths, nil
+	return files, nil
 }
 
 type projectRepo struct {

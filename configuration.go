@@ -16,17 +16,19 @@ import (
 // TODO: the configuration should not give paths to store files, but
 // an FS based on the paths in the config!
 type Settings interface {
-	// Base path storing DICE documents. (read-only)
+	// Base path storing DICE documents
 	RootFs() afero.Fs
-	// Directory storing signatures (read-only)
+	// Directory storing signatures
 	SignaturesFs() afero.Fs
-	// Directory storing Modules (read-only)
+	// Directory storing Modules
 	ModulesFs() afero.Fs
-	// Project directory, i.e., where to locate runtime files (rw)
+	// Project directory, i.e., where to locate runtime file
 	ProjectFs() afero.Fs
-	// Workspace directory, i.e., where to output (rw)
+	// Workspace directory, i.e., where to output
 	WorkspaceFs() afero.Fs
 
+	Modules() string
+	Signatures() string
 	Workspace() string
 	Databases() string
 }
@@ -160,8 +162,16 @@ type Configuration struct {
 	Paths   *StandardPaths `json:"paths"`
 	Project *Project       `json:"project"`
 
+	rFs   afero.Fs
+	wFs   afero.Fs
 	fs    afero.Fs
 	study *Study
+}
+
+func (c *Configuration) SetWriteFs(fs afero.Fs) *Configuration {
+	c.wFs = fs
+	c.fs = afero.NewCopyOnWriteFs(c.rFs, c.wFs)
+	return c
 }
 
 // Returns the location where we store databases, modules, and signatures
@@ -201,6 +211,14 @@ func (c *Configuration) Root() string {
 	return c.Paths.DATA_HOME
 }
 
+func (c *Configuration) Modules() string {
+	return "modules"
+}
+
+func (c *Configuration) Signatures() string {
+	return "signatures"
+}
+
 func (c *Configuration) Workspace() string {
 	if c.study != nil {
 		return c.study.Path
@@ -214,19 +232,16 @@ func (c *Configuration) Databases() string {
 	// a path to it. Best alternative is to create a temporary directory
 	// and delete it afterwards. BTW, on windows this behavior is different,
 	// so we cannot clear out the folder
-	if _, ok := c.fs.(*afero.MemMapFs); ok {
+	switch c.wFs.(type) {
+	case *afero.MemMapFs:
 		dir, err := os.MkdirTemp(c.Paths.STATE_HOME, "databases-*")
 		if err != nil {
 			panic(err)
 		}
 		return dir
+	default:
+		return path.Join(c.Root(), "databases")
 	}
-	return path.Join(c.Root(), "databases")
-}
-
-func (c *Configuration) SetFS(fs afero.Fs) *Configuration {
-	c.fs = fs
-	return c
 }
 
 var (
@@ -381,6 +396,7 @@ func LoadSettings(p string, stdpaths *StandardPaths, fs afero.Fs) (*Configuratio
 		}
 	}
 
-	conf.fs = fs
+	conf.rFs = afero.NewOsFs()
+	conf.SetWriteFs(fs)
 	return conf, nil
 }
