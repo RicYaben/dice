@@ -23,6 +23,11 @@ It was first thought as a tool for Internet surveys and monitoring networks, a f
 However, DICE can be used at many different levels.
 It's main purpose is to provide flexibility for as many measurements as you can think of.
 
+> [!IMPORTANT]
+> We made available a PoC [mini version of DICE](https://github.com/RicYaben/dice-mini).
+> It contains many (but not all) features out of the box, and is written in Python (thus, not as fast IO).
+> We have used this version in multiple Internet measurements and as a demo to showcase the engine's potential. 
+
 __Table of Conent__
 
 1. [Installation](#installation)
